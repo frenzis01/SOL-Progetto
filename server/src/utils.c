@@ -1,0 +1,152 @@
+#include <utils.h>
+
+#include <stdarg.h>
+
+
+ssize_t /* Read "n" bytes from a descriptor */
+readn(int fd, void *ptr, size_t n)
+{
+    size_t nleft;
+    ssize_t nread;
+
+    nleft = n;
+    while (nleft > 0)
+    {
+        if ((nread = read(fd, ptr, nleft)) < 0)
+        {
+            if (nleft == n)
+                return -1; /* error, return -1 */
+            else
+                break; /* error, return amount read so far */
+        }
+        else if (nread == 0)
+        {
+            puts("eof");
+            break; /* EOF */
+        }
+        nleft -= nread;
+        ptr += nread;
+    }
+    puts("fineciclo");
+    // puts("ritorna readn");
+    return (n - nleft); /* return >= 0 */
+}
+
+ssize_t /* Write "n" bytes to a descriptor */
+writen(int fd, void *ptr, size_t n)
+{
+    size_t nleft;
+    ssize_t nwritten;
+
+    nleft = n;
+    while (nleft > 0)
+    {
+        if ((nwritten = write(fd, ptr, nleft)) < 0)
+        {
+            if (nleft == n)
+                return -1; /* error, return -1 */
+            else
+                break; /* error, return amount written so far */
+        }
+        else if (nwritten == 0)
+            break;
+        nleft -= nwritten;
+        ptr += nwritten;
+    }
+    return (n - nleft); /* return >= 0 */
+}
+
+// Non rimuove newline \n
+char *readLineFromFILEn(char *inputfer, unsigned int len, FILE *fp)
+{
+    char *res = fgets(inputfer, len, fp);
+
+    if (res == NULL)
+        return res;
+
+    return inputfer;
+}
+
+// Rimuove il newline \n
+char *readLineFromFILE(char *buffer, unsigned int len, FILE *fp)
+{
+    char *res = fgets(buffer, len, fp);
+
+    if (res == NULL)
+        return res;
+
+    /* remove the useless newline character */
+    char *newline = strchr(buffer, '\n');
+    if (newline)
+    {
+        *newline = '\0';
+    }
+    return buffer;
+}
+
+// Mette il content del file in buf
+// !!! if file is bigger than bufSize, it does nothing
+int myRead(const char *path, char *buf, size_t bufSize)
+{
+    // path assoluto richiesto
+    int fd, bytesRead;
+    re_neg1(fd = open(path, O_RDONLY)); // e se venisse interrotta da un segnale?
+    // if (fd = open(path,O_RDONLY)) return 0;
+    re_neg1(bytesRead = readn(fd, buf, bufSize));
+    re_neg1(close(fd)); // e se venisse interrotta da un segnale?
+    return bytesRead;
+}
+
+
+// READ CONFIG FILE
+// TEST OK
+
+char *conf_string(FILE *file, char const *desired_name) { 
+    char name[128];
+    char val[128];
+
+    while (fscanf(file, "%127[^=]=%127[^\n]%*c", name, val) == 2) {
+        if (0 == strcmp(name, desired_name)) {
+            return strdup(val);
+        }
+    }
+    return NULL;
+}
+
+int conf_sizet(FILE *file, char const *desired_name, size_t *ret) {
+    char *temp = conf_string(file, desired_name);
+
+    char *stop;
+    *ret = strtol(temp, &stop, 10);
+    int ret_val = stop == temp;
+    free(temp);
+    return ret_val;
+}
+
+sigset_t initSigMask() {
+    sigset_t set;
+}
+
+/**
+ * Find maximum between two or more integer variables
+ * @param args Total number of integers
+ * @param ... List of integer variables to find maximum
+ * @return Maximum among all integers passed
+ */
+int max(int args, ...){
+    int i, max, cur;
+    va_list valist;
+    va_start(valist, args);
+
+    max = INT_MIN;
+
+    for(i=0; i<args; i++){
+        cur = va_arg(valist, int); // Get next elements in the list
+        if(max < cur)
+            max = cur;
+    }
+
+    va_end(valist); // Clean memory assigned by valist
+
+    return max;
+}

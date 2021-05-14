@@ -27,7 +27,7 @@ queue *requests;
 #define BUF 8192
 #define UNIX_PATH_MAX 108
 
-int shutdown = 0;
+int myShutdown = 0;
 
 #define HARSH_QUIT 2
 
@@ -67,6 +67,8 @@ void *dispatcher(void *arg)
     int sel_ret;
     Request *currRequest = malloc(sizeof(Request));
 
+    int myerr = 0;
+
     // pthread_mutex_lock(&mutex);
     while (1)
     {
@@ -82,7 +84,7 @@ void *dispatcher(void *arg)
             // Socket comunicazione client
             if (FD_ISSET(fd, &read_set))
             {
-                if (fd == fd_skt && shutdown == 0)
+                if (fd == fd_skt && myShutdown == 0)
                 {
                     ec_neg1(fd_c = accept(fd_skt, NULL, 0));
                     // activeConnections++;
@@ -90,7 +92,7 @@ void *dispatcher(void *arg)
                     if (fd_c > fd_hwm)
                         fd_hwm = fd_c;
                 }
-                else if (fd == MANAGER_READ && shutdown != HARSH_QUIT)
+                else if (fd == MANAGER_READ && myShutdown != HARSH_QUIT)
                 {
                     // Worker comunica quali fd dei client sono ancora attivi
                     // e dunque devono essere reinseriti nel set
@@ -111,7 +113,7 @@ void *dispatcher(void *arg)
                 else if (fd == SIGNAL_READ)
                 {
                     puts("SIGNAL RECEIVED");
-                    if (shutdown == HARSH_QUIT)
+                    if (myShutdown == HARSH_QUIT)
                         break;
                 }
                 else
@@ -122,7 +124,7 @@ void *dispatcher(void *arg)
                         fd_hwm--;
 
                     ec_nz(pthread_mutex_lock(&lockReq), {});
-                    enqueue(requests, fd);
+                    queueEnqueue(requests, fd, &myerr);
                     ec_nz(pthread_cond_signal(&condReq), {});
                     ec_nz(pthread_mutex_unlock(&lockReq), {});
                 }
@@ -139,13 +141,13 @@ void *signalHandler(void *args)
 
 void *worker(void *args)
 {
-    int fd;
-    while (!shutdown)
+    int fd, myerr = 0;
+    while (!myShutdown)
     {
         ec_nz(pthread_mutex_lock(&lockReq), {});
 
         ec_nz(pthread_cond_wait(&condReq, &lockReq), {}); // wait for requests
-        fd = dequeue(requests);
+        fd = queueDequeue(requests, &myerr);
         ec_nz(pthread_mutex_unlock(&lockReq), {});
 
         // Parsing Nightmare
@@ -153,7 +155,7 @@ void *worker(void *args)
         // Serve request
 
         ec_nz(pthread_mutex_lock(&lockPipe),{});
-        write(WORKER_WRITE,fd,sizeof(int)); //pipe Worker -> Manager
+        // write(WORKER_WRITE,fd,sizeof(int)); //pipe Worker -> Manager
         ec_nz(pthread_mutex_unlock(&lockPipe),{});
     }
 }

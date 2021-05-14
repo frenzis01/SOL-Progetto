@@ -1,9 +1,17 @@
 #include <server.h>
 
-#define LOCKFILE ec_nz(pthread_mutex_lock(&(fptr->lockFile)),{});
-#define UNLOCKFILE ec_nz(pthread_mutex_unlock(&(fptr->lockFile)),{});
-#define LOCKSTORE ec_nz(pthread_mutex_lock(&(store.lockStore)),{});
-#define UNLOCKSTORE ec_nz(pthread_mutex_unlock(&(store.lockStore)),{});
+#define E_STR_LOCK 1
+#define E_STR_COND 2
+#define E_STR_INVARG 3
+#define E_STR_QUEUE 4
+#define E_STR_NOENT 5
+
+#define LOCKFILE ec_nz(pthread_mutex_lock(&(fptr->mutex)), { myerr = E_STR_LOCK; });
+#define UNLOCKFILE ec_nz(pthread_mutex_unlock(&(fptr->mutex)), { myerr = E_STR_LOCK; });
+#define LOCKORDERING ec_nz(pthread_mutex_lock(&(fptr->ordering)), { myerr = E_STR_LOCK; });
+#define UNLOCKORDERING ec_nz(pthread_mutex_unlock(&(fptr->ordering)), { myerr = E_STR_LOCK; });
+#define LOCKSTORE ec_nz(pthread_mutex_lock(&(store.lockStore)), { myerr = E_STR_LOCK; });
+#define UNLOCKSTORE ec_nz(pthread_mutex_unlock(&(store.lockStore)), { myerr = E_STR_LOCK; });
 // #define READWAIT ec_nz(pthread_cond_wait(&(fptr->readGo),&(fptr->lockFile)),{});
 
 // ec_nz(pthread_cond_wait(&(fptr->writeGo),&(fptr->lockFile)));
@@ -11,177 +19,147 @@
 // OPERAZIONI STORAGE
 // Operazioni chiamate dagli handler che controlleranno la concorrenza
 
-// Utilizziamo paradigma per Readers-Writers descritto pag_123 cap_5.10
-// !!! STARVATION
+// Utilizziamo soluzione Readers-Writers proposta nell'esercitazione su RW
 
-// ??? fdClient univoco?
-int readFile(char *path, char **toRet, int fdClient)
+int readFile(char *path, char **toRet, Client *client)
 {
+    errno = 0;
     fnode *fptr;
+    int myerr;
 
-    // Devo trovare il file nello store
-    // Devo lockare lo store per evitare che il file venga aggiunto/eliminato mentre lo cerco
-    //  Per non killare le performance
-    //  potrei unlockare lo store appena trovo il file e a quel punto lockare il file
-    ec_nz(pthread_mutex_lock(&(store.lockStore)),{}); // lock(store) per ricerca
+    LOCKSTORE;
 
-    // Ma...ha senso cercare il file?
-    // !!! OPENFILE dependant
-    // Se ad ogni read/write corrisponde una open allora avrò trovato fnode* in quella
-    //  e a questa funzione avrò passato fnode* non char *path.
-    // In tal caso cambia la gestione delle lock (?)
-    //  In realtà forse non molto ma vanno distribuite fra openFile e readFile
     if ((fptr = storeSearch(path)) == NULL)
     {
-        errno = ENOENT;                                  // meglio (semanticamente) settare errno prima di unlock
-        ec_nz(pthread_mutex_unlock(&(store.lockStore)),{}); // sblocco lo store
-        return -1;                                       // file non trovato
+        errno = ENOENT; // meglio (semanticamente) settare errno prima di unlock
+        UNLOCKSTORE;
+        return -1; // file non trovato
     }
 
-    // VA FATTO? per la read forse no...
-    // if (!fptr->open){
-    //     errno = EBADF; // meglio (semanticamente) settare errno prima di unlock
-    //     ec_nz(pthread_mutex_unlock(&(store.lockStore)));    // sblocco lo store
-    //     return -1;  // file non trovato
-    // }
-
-    ec_nz(pthread_mutex_lock(&(fptr->lockFile)),{});    // Blocchiamoci sul file
-    ec_nz(pthread_mutex_unlock(&(store.lockStore)),{}); // sblocco lo store
-    // Posso sbloccare lo store perché se passasse il Deleter per liberare spazio,
-    //  aspetterà di poter acquisire la lock sul file
-    // Possiamo considerare il Deleter come un writer ?
-    //  Ricorda che il Deleter entra in azione per colpa di un writer che non ha spazio per scrivere
-    //  mmmh...
-
-    if (fptr->lockedBy && fptr->lockedBy != fdClient)
-    {                   // Check O_LOCK
-        errno = EACCES; // File O_LOCK da un altro Client
-        ec_nz(pthread_mutex_unlock(&(fptr->lockFile)),{});
-        return -1;
-    }
+    LOCKORDERING;
+    LOCKFILE;
+    UNLOCKSTORE;
 
     // Wait per scrittori
-    while (fptr->writer)
-        ec_nz(pthread_cond_wait(&(fptr->readGo), &(fptr->lockFile)),{});
+    while (fptr->writers)
+        ec_nz(pthread_cond_wait(&(fptr->go), &(fptr->mutex)), {});
 
     // Scrittori usciti, ora leggo
 
     fptr->readers++; // Readers count update
-    fptr->ref++;     // LFU references update
 
-    // READ OPERATION
-    // Può essere meglio passare direttamente i puntatori char* ?
-    // *toRet = fptr->content;
-    // Probab no... Chissà cosa succede al file, potrebbe diventare complicato
-    toRet = malloc(fptr->size + 1);
-    strncpy(*toRet, fptr->content, fptr->size);
-    toRet[fptr->size] = '\0'; // man strncpy
+    UNLOCKORDERING; // avanti il prossimo
+    UNLOCKFILE;
 
-    // Reader ha finito
+    // if (O_LOCK || !OPENED)
+    if ((fptr->lockedBy && fptr->lockedBy != client->fd) || !queueFind(fptr->openBy, client, cmpFd, &myerr))
+    {
+        errno = EACCES; // File O_LOCK da un altro Client
+    }
+
+    // READ - BINARY
+    // '\0' per terminare (?) (size + 1?)
+    toRet = malloc(fptr->size);
+    if (errno != ENOMEM)
+        memcpy(*toRet, fptr->content, fptr->size);
+
+    // READ FINITO
+    LOCKFILE;
     fptr->readers--; // Readers count update
-    if (fptr->readers == 0 /* && waitingWriters > 0*/)
-        pthread_cond_signal(&(fptr->writeGo));
-    // Se non ci sono writer pazienza, il signal andrà perduto
-    // Pazienza (?)
+    if (fptr->readers == 0)
+        pthread_cond_signal(&(fptr->go));
+    UNLOCKFILE;
 
-    ec_nz(pthread_mutex_unlock(&(fptr->lockFile)),{});
     return 0; // success
 }
 
-// ??? fdClient univoco?
-// SERVE GESTIONE SIZE , CAPACITY ECC.
-// Verrà fatta nella open ? NO! La open non sa quanto sia grosso quello va scritto
-int writeFile(char *path, char *content, Client client)
+int appendToFile(char *path, char *content, size_t size, Client *client, queue **evicted, int writeFlag)
 {
+    // writeFlag distingue fra appendToFile e writeFile: cambia solo un controllo
+    //  su client->fd e su fdCanWrite presente in ogni fnode
+    errno = 0;
     fnode *fptr;
+    int myerr;
+    *evicted = NULL;
 
-    size_t size = strlen(content);
     LOCKSTORE;
-    // CHECK CAPACITY (non è nella open)
-    if (store.currSize + size > store.maxSize)
-    {
-        UNLOCKSTORE;
-        // slaughterFile(size, client);
-        LOCKSTORE;
-    }
-
-    // Il file esiste? Se sì, lo sovrascriviamo o scriviamo in append?
-    // !!! Lasciamo da parte l'append
 
     if ((fptr = storeSearch(path)) == NULL)
     {
-        // la openFile controllerà se abbiamo raggiunto il tetto max di file contenuti nello store
-        int openf = openFile(path, 1, 0, client, &fptr);
-        if (openf == -1)
-        { 
-            // file locked da un !=client
-            // errno = EACCES è stato settato da openFile
-            UNLOCKSTORE;
-            return -1;
-        }
-        else if (openf == -2)
-        {
-            // non entro mai qui, giusto? S N S I
-        }
-        //else : openFile ha avuto success
+        errno = ENOENT;
+        UNLOCKSTORE;
+        return -1;
     }
 
-    LOCKFILE; // Blocchiamoci sul file
+    LOCKORDERING; // Blocchiamoci sul file
+    LOCKFILE;
     UNLOCKSTORE;
 
-    while (fptr->readers /* && fptr->writer ???*/) // Da rivedere le guardie sulle wait...
-        ec_nz(pthread_cond_wait(&(fptr->writeGo), &(fptr->lockFile)),{});
-    
-    // BIVIO in base a openFile
-    //  Non si può fare prima della wait perchè qualcuno potrebbe chiudere il file
-    // 1st approach
-    //  if (!fptr->open) fail;
-    // 2nd approach
-    // chiamo comunque openFile perchè il file deve essere aperto SOLO dal client
-    //  che ha richiesto questa WRITE
+    // ??? ok il controllo dopo la wait e la unlock?
 
-    // se è locked non posso writare
-    if (fptr->lockedBy && fptr->lockedBy != client.fd)
+    while (fptr->readers || fptr->writers) // Da rivedere le guardie sulle wait...
+        ec_nz(pthread_cond_wait(&(fptr->go), &(fptr->mutex)), {});
+
+    fptr->writers++;
+
+    UNLOCKORDERING;
+    UNLOCKFILE;
+
+    // CHECK CAPACITY
+    LOCKSTORE;
+    if (store.currSize + size > store.maxSize)
+    {
+        *evicted = storeCleaner(size);
+    }
+    UNLOCKSTORE;
+
+    int alreadyLocked = 0;
+    // if (O_LOCK || !OPENED)
+    if ((fptr->lockedBy && fptr->lockedBy != client->fd) || !queueFind(fptr->openBy, client, cmpFd, &myerr))
     {
         errno = EACCES;
-        UNLOCKFILE;
-        return -1; // partial failure
-        // RICORDA: la chiamata lock del client NON deve terminare finchè
-        //  il file non viene lockato
+        alreadyLocked = 1;
+    }
+    else if (writeFlag && fptr->fdCanWrite != client->fd)
+    {
+        errno = EACCES;
+        alreadyLocked = 2;
+    }
+    else
+    {
+        // TODO : test this
+        fptr->content = realloc(fptr->content, fptr->size + size);
+        memcpy(fptr->content + fptr->size, content, size);
     }
 
-    fptr->writer++;
-    fptr->ref++;
+    LOCKFILE;
 
-    // la size di fptr è strlen(content)? e se non avesse lo '\0' alla fine?
-    fptr->size = strlen(content); // senza +1 (?)
-    fptr->content = malloc(fptr->size + 1);
-    strncpy(fptr->content, content, fptr->size); // non becca il +1 (?) (da testare)
-    fptr->content[fptr->size] = '\0';            // man strncpy
-
-    LOCKSTORE;
-    // storeInsert(fptr);
-    UNLOCKSTORE;
+    fptr->writers--;
+    ec_nz(pthread_cond_signal(&(fptr->go)), {});
 
     UNLOCKFILE;
-    return 0; // success
+    return alreadyLocked;
 }
 
-int openFile(char *path, int createF, int lockF, Client client, fnode **toRet)
+int openFile(char *path, int createF, int lockF, Client *client, fnode **toRet)
 {
+    // openFile non restituisce il file evicted
+    errno = 0;
     fnode *fptr;
+    int myerr;
     LOCKSTORE;
+    fptr = storeSearch(path);
 
     *toRet == NULL;
     // O_CREATE not set e il file non esiste nello storage
-    if (!createF && !storeSearch(path))
+    if (!createF && !fptr)
     {
         errno = ENOENT;
         UNLOCKSTORE;
         return -1;
     }
     // O_CREATE set e il file esiste già nello storage
-    if (createF && storeSearch(path))
+    if (createF && fptr)
     {
         errno = EADDRINUSE;
         UNLOCKSTORE;
@@ -193,242 +171,384 @@ int openFile(char *path, int createF, int lockF, Client client, fnode **toRet)
         {
             // remove 1 file
         }
-        // UNLOCKSTORE
+
         fptr = initFile(path);
         if (lockF)
-            fptr->lockedBy = client.pid;
-        // LOCKSTORE
-        LOCKFILE
-        storeInsert(fptr); // store già locked
-        UNLOCKSTORE
+        {
+            fptr->lockedBy = client->fd;
+            fptr->fdCanWrite = client->fd; // next OP might be writeFile
+        }
+        queueEnqueue(fptr->openBy, client, &myerr);
+
+        LOCKFILE; // store già locked
+        storeInsert(fptr);
+        UNLOCKSTORE;
+        queueEnqueue(fptr->openBy, client, &myerr);
         *toRet = fptr;
-        UNLOCKFILE
+        UNLOCKFILE;
         return 0; //success
     }
     // IL FILE ESISTE GIÀ NELLO STORAGE
-    // 'else'
-    fptr = storeSearch(path);
+    // fptr punta al file
 
+    // openFile agisce come un Writer
+
+    LOCKORDERING;
     LOCKFILE;
-    while (fptr->readers /* && fptr->writer ???*/) // Da rivedere le guardie sulle wait...
-        ec_nz(pthread_cond_wait(&(fptr->writeGo), &(fptr->lockFile)),{});
-    
-    if (fptr->lockedBy && fptr->lockedBy != client.fd)
-    {
-        errno = EACCES;
-        UNLOCKFILE;
-        return -1;
-    }
-    *toRet = fptr;
     UNLOCKSTORE;
 
-    // vero casino
-    // E ora? casino. Cosa ritorniamo?
-    // Stiamo gestendo i lockersPending in una queue sul file
-    // Il file esisteva già ed era lockato da un altro client => la open NON ha avuto successo
-    // O meglio, non ancora.
-    // Che fare?
-    // Il problema si risolve, perchè quando chi ha lockato il file chiamerà l'unlockFile
-    // Nella unlockFile scriveremo sul fd di (pop(lockersPending)) per dirgli che
-    //  la sua lock è andata a buon fine
-    // In questo modo nessun thread deve fermarsi ad aspettare
-    if (lockF)
-    {
-        // RICORDA, abbiamo lockato il file
+    while (fptr->readers || fptr->writers)
+        ec_nz(pthread_cond_wait(&(fptr->go), &(fptr->mutex)), {});
 
-        if (fptr->lockedBy && fptr->lockedBy != client.fd)
-        {
-            enqueue(fptr->lockersPending, client.fd);
-            UNLOCKFILE;
-            return -2; // partial failure
-            // RICORDA: la chiamata lock del client NON deve terminare finchè
-            //  il file non viene lockato
-        }
-        else
-        {
-            fptr->lockedBy = client.fd;
-            UNLOCKFILE;
-            return 0; //success
-        }
+    fptr->writers++;
+
+    UNLOCKORDERING;
+    UNLOCKFILE;
+
+    int alreadyLocked = 0;
+
+    // ??? è possibile controllare se il file era già lockato prima di acquisirlo?
+    //   ...No
+
+    // if (O_LOCK || !OPENED)
+    if ((fptr->lockedBy && fptr->lockedBy != client->fd))
+    {
+        errno = EACCES;
+        alreadyLocked = 1;
     }
-    // dovremmo spostare questa roba nella lockfile e guardare solo il val di ritorno?
+    else
+    {
+        fptr->fdCanWrite = 0; // va fatto per ogni operazione
+
+        if (!queueFind(fptr->openBy, client, cmpFd, &myerr))
+            queueEnqueue(fptr->openBy, client, &myerr);
+
+        if (lockF) // se siamo arrivati fin qui il file non era già lockato
+            fptr->lockedBy = client->fd;
+    }
+
+    LOCKFILE;
+
+    fptr->writers--;
+    ec_nz(pthread_cond_signal(&(fptr->go)), {});
+
+    UNLOCKFILE;
+
+    return alreadyLocked;
+}
+
+int lockFile(char *path, Client *client)
+{
+    // lockFile non necessita di una open prima
+    errno = 0;
+    fnode *fptr;
+    int myerr;
+    queue *evicted = NULL;
+
+    LOCKSTORE;
+
+    if ((fptr = storeSearch(path)) == NULL)
+    {
+        errno = ENOENT;
+        UNLOCKSTORE;
+        return -1;
+    }
+
+    LOCKORDERING; // Blocchiamoci sul file
+    LOCKFILE;
+    UNLOCKSTORE;
+
+    // ??? ok il controllo dopo la wait e la unlock?
+
+    while (fptr->readers || fptr->writers)
+        ec_nz(pthread_cond_wait(&(fptr->go), &(fptr->mutex)), {});
+
+    fptr->writers++;
+
+    UNLOCKORDERING;
+    UNLOCKFILE;
+
+    // if (O_LOCK || !OPENED)
+    if (fptr->lockedBy && fptr->lockedBy != client->fd)
+        queueEnqueue(fptr->lockersPending, client, &myerr);
+    else
+        fptr->lockedBy = client->fd;
+
+    LOCKFILE;
+
+    fptr->writers--;
+    ec_nz(pthread_cond_signal(&(fptr->go)), {});
+
+    UNLOCKFILE;
+    return 0; // success
+}
+
+int unlockFile(char *path, Client *client)
+{
+    errno = 0;
+    fnode *fptr;
+    int myerr;
+
+    LOCKSTORE;
+    if ((fptr = storeSearch(path)) == NULL)
+    {
+        errno = ENOENT;
+        UNLOCKSTORE;
+        return -1; // il file non esiste nello storage
+    }
+
+    LOCKORDERING; // Blocchiamoci sul file
+    LOCKFILE;
+    UNLOCKSTORE;
+
+    while (fptr->readers || fptr->writers)
+        ec_nz(pthread_cond_wait(&(fptr->go), &(fptr->mutex)), {});
+
+    fptr->writers++;
+
+    UNLOCKORDERING;
+    UNLOCKFILE;
+
+    int alreadyLocked = 0;
+
+    if (fptr->lockedBy && fptr->lockedBy != client->fd)
+    {
+        errno = EACCES;
+        alreadyLocked = 1;
+    }
+    else
+    {
+        fptr->lockedBy = dequeue(fptr->lockersPending, &myerr);
+        // INFORMA IL CLIENT DELL'AVVENUTA LOCK
+        // Write su lockedBy_fd
+    }
+
+    LOCKFILE;
+
+    fptr->writers--;
+    ec_nz(pthread_cond_signal(&(fptr->go)), {});
+
+    UNLOCKFILE;
+}
+
+int cmpFd(void *a, void *b)
+{
+    if (((Client *)a)->fd == ((Client *)b)->fd)
+        return 1;
     return 0;
 }
 
-int lockFile(char *path, Client client)
+int cmpFile(void *a, void *b)
 {
-    fnode *fptr;
-    LOCKSTORE;
-    if ((fptr = storeSearch(path)) == NULL)
-    {
-        errno = ENOENT;
-        UNLOCKSTORE;
-        return -1; // il file non esiste nello storage
-    }
-    // else : il file c'è
-    LOCKFILE;
-    UNLOCKSTORE;
-
-    while (fptr->readers /* && fptr->writer ???*/) // Da rivedere le guardie sulle wait...
-        ec_nz(pthread_cond_wait(&(fptr->writeGo), &(fptr->lockFile)),{});
-    
-
-    // è stato lockato da un altro client?
-    if (fptr->lockedBy && fptr->lockedBy != client.fd)
-    {
-        enqueue(fptr->lockersPending, client.fd);
-        UNLOCKFILE;
-        return -2; // partial failure
-        // RICORDA: la chiamata lock del client NON deve terminare finchè
-        //  il file non viene lockato
-    }
-    // 'else' : è stato già lockato dal client o non è stato lockato,
-
-    fptr->lockedBy = client.fd;
-    UNLOCKFILE;
-    return 0; //success
+    if (strncmp(((fnode *)a)->path, ((fnode *)b)->path, PATH_LENGTH) == 0)
+        return 1;
+    return 0;
 }
 
-int unlockFile (char *path, Client client) {
-    fnode *fptr;
-    LOCKSTORE;
-    if ((fptr = storeSearch(path)) == NULL)
-    {
-        errno = ENOENT;
-        UNLOCKSTORE;
-        return -1; // il file non esiste nello storage
-    }
-    LOCKFILE;
-    UNLOCKSTORE;
-    while (fptr->readers /* && fptr->writer ???*/) // Da rivedere le guardie sulle wait...
-        ec_nz(pthread_cond_wait(&(fptr->writeGo), &(fptr->lockFile)),{});
-    
-
-    if (fptr->lockedBy && fptr->lockedBy != client.fd)
-    {
-        errno = EACCES;
-        UNLOCKFILE;
-        return -1;
-    }
-
-    fptr->lockedBy = dequeue(fptr->lockersPending);
-    // INFORMA IL CLIENT DELL'AVVENUTA LOCK
-    // Write su lockedBy_fd
-
-
-    UNLOCKFILE;
+int cmpPath(void *a, void *b)
+{
+    if (strncmp(((fnode *)a)->path, (char *)b, PATH_LENGTH) == 0)
+        return 1;
+    return 0;
 }
 
 fnode *initFile(char *path)
 {
+    errno = 0;
+    int myerr;
+
     fnode *fptr = malloc(sizeof(fnode));
+    if (!fptr)
+        return NULL;
     fptr->path = path;
     fptr->content = NULL;
     fptr->size = 0;
-    createQueue(fptr->lockersPending, freeFile);
+    fptr->lockersPending = queueCreate(free, cmpFd, &myerr);
+    fptr->openBy = queueCreate(free, cmpFd, &myerr);
     fptr->readers = 0;
-    fptr->writer = 0;
+    fptr->writers = 0;
     // è corretto NULL qui ???
-    pthread_cond_init(&(fptr->writeGo), NULL);
-    pthread_cond_init(&(fptr->readGo), NULL);
-    pthread_mutex_init(&(fptr->lockFile), NULL);
-    fptr->open = 1;
-    fptr->ref = 0;
-    fptr->prev = NULL;
-    fptr->next = NULL;
+    ec_nz(pthread_cond_init(&(fptr->go), NULL), {myerr = E_STR_COND; return NULL; });
+    ec_nz(pthread_mutex_init(&(fptr->mutex), NULL), {myerr = E_STR_LOCK; return NULL; });
+    ec_nz(pthread_mutex_init(&(fptr->ordering), NULL), {myerr = E_STR_LOCK; return NULL; });
+
+    // fptr->prev = NULL;
+    // fptr->next = NULL;
 
     return fptr;
 }
 
+int storeInit(size_t maxNfiles, size_t maxSize)
+{
+    int myerr;
+
+    store.files = queueCreate(freeFile, cmpFile, &myerr);
+    store.maxNfiles = maxNfiles;
+    store.maxSize = maxSize;
+
+    return myerr;
+}
+
 _Bool storeIsEmpty()
 {
-    if (store.head /* || store.currNfiles == 0 */)
-        return 0;
-    return 1;
+    if (store.currNfiles == 0)
+        return 1;
+    return 0;
 }
 
 _Bool storeIsFull()
 {
     if (store.currNfiles == store.maxNfiles)
-        return 0;
-    return 1;
+        return 1;
+    return 0;
 }
 
 // Inserisce sempre in coda
 int storeInsert(fnode *fptr)
 {
     // ec_nz(pthread_mutex_lock(&(store.lockStore)));
+    int myerr = 0;
 
-    // if (!store || !fptr) return -1;
+    if (!fptr)
+        return E_STR_INVARG;
+    if (!store.files)
+        return E_STR_QUEUE;
 
-    fptr->next = NULL;
-    fptr->prev = store.tail;
+    queueEnqueue(store.files, fptr, &myerr);
 
-    // Inserimento in testa
-    if (!store.head)
-    {
-        store.head = fptr;
-        store.tail = fptr;
-    }
-    // inserimento in coda
-    else
-    {
-        store.tail->next = fptr;
-    }
-
+    store.currSize += fptr->size;
     store.currNfiles++;
-    store.currSize += sizeof(fptr->content);
+
+    return 0;
 }
 
-int storeDelete(fnode *fptr)
+int storeDelete(fnode *fptr, char **toRet)
 {
 
-    if (!fptr->prev)
-    { // fptr testa
-        store.head = NULL;
-    }
-    else
-    {
-        fptr->prev->next = fptr->next;
-    }
-    if (!fptr->next)
-    { // fptr coda
-        store.tail = NULL;
-    }
-    else
-    {
-        fptr->next->prev = fptr->prev;
-    }
+    int myerr = 0;
 
-    //
+    if (!fptr)
+        return E_STR_INVARG;
+    if (!store.files)
+        return E_STR_QUEUE;
 
-    freeFile(fptr);
+    fnode *tmp = queueRemove(store.files, fptr, cmpFile, &myerr);
+    // if (myerr) return E_STR_QUEUE;
+
+    if (!tmp)
+        return E_STR_NOENT;
+
+    store.currSize -= fptr->size;
+    store.currNfiles--;
+
+    // Se il file viene espulso dallo store, libero il ptr ma
+    //  prima restituisco il contenuto del file
+
+    // altrimenti no
+    if (toRet)
+    {
+        // SALVIAMO IN toRet il content del file eliminato
+        *toRet = malloc(fptr->size); // char ? binary ?
+        memcpy(*toRet, fptr->content, fptr->size);
+        freeFile(fptr);
+    }
 
     return 0;
 }
 
 fnode *storeSearch(char *path)
 {
-    fnode *curr = store.head;
-    // Scorro finchè non trovo il file desiderato o arrivo in fondo
-    while (curr && strncmp(curr->path, path, strlen(path)))
-    {
-        curr = curr->next;
-    }
+    int myerr = 0;
+    fnode *curr = queueFind(store.files, path, cmpPath, &myerr);
 
     // Se curr non è in storage
     if (!curr)
         errno = ENOENT;
+    else
+    {
+        myerr = storeDelete(curr, 0);
+        myerr = storeInsert(curr); // LRU : riposizioniamo il file in fondo alla coda
+    }
 
-    
     return curr; // file non trovato
+}
+
+// TODO
+// I FILE ESPULSI VANNO RESTITUITI!
+queue *storeCleaner(size_t sizeNeeded)
+{
+    // NB
+    fnode *fptr;
+    int myerr = 0;
+    char *tmpContent;
+    queue *toReturn = queueCreate(free, strcmp, &myerr); // is strcmp ok here?
+    if (myerr)
+    {
+        errno = ENOMEM;
+        return NULL;
+    }
+    // il chiamante deve controllare che sizeNeeded < store.maxSize
+
+    // Prima passata : evito le lock
+    LOCKSTORE;
+    while ((store.maxSize - store.currSize) < sizeNeeded)
+    {
+        fptr = queuePeek(store.files, &myerr);
+        LOCKORDERING;
+        LOCKFILE;
+
+        while (fptr->readers || fptr->writers)
+            ec_nz(pthread_cond_wait(&(fptr->go), &(fptr->mutex)), {});
+
+        fptr->writers++;
+
+        UNLOCKORDERING;
+        UNLOCKFILE;
+
+        if (fptr->lockedBy == 0)
+        {
+            storeDelete(fptr, &tmpContent);
+            queueEnqueue(toReturn, tmpContent, &myerr);
+        }
+
+        LOCKFILE;
+        fptr->writers--;
+        ec_nz(pthread_cond_signal(&(fptr->go)), {});
+        UNLOCKFILE;
+    }
+    // Seconda passata : elimino indipendentemente dai O_LOCK
+    while ((store.maxSize - store.currSize) < sizeNeeded)
+    {
+        fptr = queuePeek(store.files, &myerr);
+        LOCKORDERING;
+        LOCKFILE;
+
+        while (fptr->readers || fptr->writers)
+            ec_nz(pthread_cond_wait(&(fptr->go), &(fptr->mutex)), {});
+
+        fptr->writers++;
+
+        UNLOCKORDERING;
+        UNLOCKFILE;
+
+        storeDelete(fptr, &tmpContent);
+        queueEnqueue(toReturn, tmpContent, &myerr);
+
+        LOCKFILE;
+        fptr->writers--;
+        ec_nz(pthread_cond_signal(&(fptr->go)), {});
+        UNLOCKFILE;
+    }
+    UNLOCKSTORE;
 }
 
 int freeFile(fnode *fptr)
 {
+    int myerr;
     // Assumiamo che il caller abbia sistemato mutex e cond
     free(fptr->content);
-    destroyQueue(&(fptr->lockersPending));
+    destroyQueue(&(fptr->lockersPending), &myerr);
+    destroyQueue(&(fptr->openBy), &myerr);
 
     // Anything else ???
 

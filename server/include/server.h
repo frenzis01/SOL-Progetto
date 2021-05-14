@@ -2,7 +2,6 @@
 #define SERVER_H
 
 #include <queue.h>
-#include <uuid/uuid.h>
 #include <pthread.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -34,6 +33,8 @@
 #include<logger.h>
 #include <utils.h>
 
+#define PATH_LENGTH 2048
+
 typedef struct
 {
     // config
@@ -49,9 +50,10 @@ typedef struct
 } ServerData;
 
 typedef struct {
-    uuid_t id;
     pid_t pid;
     int fd;
+    queue *opened;
+    queue *locked; // actually locked or pending ?
 } Client;
 
 typedef struct nodo {
@@ -59,30 +61,30 @@ typedef struct nodo {
     char *content;
     size_t size;
 
+    int fdCanWrite; // 0 : no one
+                    // !0 : fd di client che ha fatto openFile(O_CREAT,O_LOCK)
+
     // Client lockedBy; // Client che ha lockato il file
     int lockedBy;   // 
     queue *lockersPending; // FIFO di Client che attendono la lock
-
-    _Bool open; // richiesto per validità
+    queue *openBy;
 
     int readers; // Per condition variable
-    _Bool writer; // se c'è un writer attivo
+    int writers; // se c'è un writer attivo
 
-    pthread_cond_t writeGo;
-    pthread_cond_t readGo;
+    pthread_cond_t go;
     // mutua esclusione sul singolo file
-    pthread_mutex_t lockFile;
+    pthread_mutex_t mutex;
+    pthread_mutex_t ordering;
 
-    // LFU references counter
-    size_t ref;
-
-    struct nodo *prev;
-    struct nodo *next;
+    // struct nodo *prev;
+    // struct nodo *next;
 } fnode;
 
 typedef struct {
-    fnode *head;
-    fnode *tail;
+    // fnode *head;
+    // fnode *tail;
+    queue *files;
 
     pthread_mutex_t lockStore;
 

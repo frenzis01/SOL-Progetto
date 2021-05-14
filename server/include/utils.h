@@ -34,8 +34,8 @@
         exit(EXIT_FAILURE); \
     }
 
-#define mye_n(s, x)  \
-    if ((s) == NULL) \
+#define mye_z(s, x)  \
+    if (!(s)) \
     {                \
         myerr = x;   \
         perror(#s);  \

@@ -1,44 +1,49 @@
 // #include "queue.h"
 #include <queue.h>
 #include <string.h>
+#include <stdio.h>
 
-queue *createQueue(size_t allocSize,void (*freeValue)(void*))
-{
-	queue *q = (queue *)malloc(sizeof(queue));
-	if (q == NULL)
-	{
-		return NULL;
+#define eq_z(s, x, c) \
+	if (!(s))         \
+	{                 \
+		*E_QUEUE = x; \
+		c;            \
+		perror(#s);   \
 	}
-	q->allocationSize = allocSize;
+
+// int *E_QUEUE = 0;
+#define E_QUEUE_MALLOC 1
+#define E_QUEUE_INVARG 2
+
+// allocSize inutile...
+queue *queueCreate( void (*freeValue)(void *), int (*compare)(void *, void *), int *E_QUEUE)
+{
+	queue *q = malloc(sizeof(queue));
+	eq_z(q, E_QUEUE_MALLOC, { return NULL; });
+	// q->allocationSize = allocSize;
 	q->size = 0;
 	q->head = q->tail = NULL;
 
 	q->freeValue = freeValue;
+	q->compare = compare;
 	return q;
 }
 
-void enqueue(queue *q, void *_data)
+void queueEnqueue(queue *q, void *_data, int *E_QUEUE)
 {
-	if (q == NULL)
-	{
-		fprintf(stderr, "Queue can't be null");
-		exit(-1);
-	}
+	eq_z(q, E_QUEUE_INVARG, { return; });
 
 	data *toInsert = (data *)malloc(sizeof(data));
-	if (toInsert == NULL)
-	{
-		fprintf(stderr, "Error allocating memory");
-		exit(-1);
-	}
-	toInsert->data = malloc(q->allocationSize);
-	if (toInsert->data == NULL)
-	{
-		fprintf(stderr, "Error allocating memory");
-		exit(-1);
-	}
+	eq_z(toInsert, E_QUEUE_MALLOC, { return; });
+
+	// Invece di copiare il contenuto di data, assegnamo il void*
+	// 	toInsert->data = malloc(q->allocationSize);
+	// 	eq_z(toInsert->data, E_QUEUE_MALLOC, { return NULL; });
+
 	toInsert->next = NULL;
-	memcpy(toInsert->data, _data, q->allocationSize);
+	toInsert->prev = NULL;
+	toInsert->data = _data;
+	// 	memcpy(toInsert->data, _data, q->allocationSize);
 	if (q->size == 0)
 	{ //First insertion
 		q->head = q->tail = toInsert;
@@ -46,19 +51,20 @@ void enqueue(queue *q, void *_data)
 	else
 	{
 		q->tail->next = toInsert;
+		toInsert->prev = q->tail;
 		q->tail = toInsert;
 	}
 
 	q->size++;
 }
 
-void *dequeue(queue *q)
+void *queueDequeue(queue *q, int *E_QUEUE)
 {
-	if (q == NULL || isEmpty(q))
-	{
-		fprintf(stderr, "Queue is null or empty");
-		exit(-1);
-	}
+
+	eq_z(q, E_QUEUE_INVARG, { return NULL; });
+
+	if (!(q->head))
+		return NULL;
 
 	data *toDel = q->head;
 	void *toRet = q->head->data;
@@ -73,6 +79,7 @@ void *dequeue(queue *q)
 		q->size--;
 		return toRet;
 	}
+	q->head->next->prev = NULL;
 	q->head = q->head->next;
 	// memcpy(toRet, toDel->data, q->allocationSize);
 	// free(toDel->data);
@@ -81,26 +88,20 @@ void *dequeue(queue *q)
 	return toRet;
 }
 
-void front(queue*q, void *toRet)
+void *queuePeek(queue *q, int *E_QUEUE)
 {
-	if (q == NULL)
-	{
-		fprintf(stderr, "Queue can't be null");
-		exit(-1);
-	}
+	eq_z(q, E_QUEUE_INVARG, { return NULL; });
 
-	memcpy(toRet, q->head->data, q->allocationSize);
+	if (!q->head) return NULL;
+	return q->head->data;
+	// memcpy(toRet, q->head->data, q->allocationSize);
 }
 
-void clearQueue(queue *q)
+void queueClear(queue *q, int *E_QUEUE)
 {
-	if (q == NULL)
-	{
-		fprintf(stderr, "Queue can't be null");
-		exit(-1);
-	}
+	eq_z(q, E_QUEUE_INVARG, { return; });
 
-	while (!isEmpty(q))
+	while (!queueIsEmpty(q, E_QUEUE))
 	{
 		data *temp = q->head;
 		q->head = q->head->next;
@@ -111,35 +112,92 @@ void clearQueue(queue *q)
 	}
 }
 
-size_t getSize(queue *q)
+size_t queueGetSize(queue *q, int *E_QUEUE)
 {
-	if (q == NULL)
-	{
-		fprintf(stderr, "Queue can't be null");
-		exit(-1);
-	}
+	eq_z(q, E_QUEUE_INVARG, { return 0; });
 
 	return q->size;
 }
 
-bool isEmpty(queue *q)
+_Bool queueIsEmpty(queue *q, int *E_QUEUE)
 {
-	if (q == NULL)
-	{
-		return NULL;
-	}
+	eq_z(q, E_QUEUE_INVARG, { return 1; });
+
 	if (q->size == 0)
 	{
-		return true;
+		return 1;
 	}
 	else
 	{
-		return false;
+		return 0;
 	}
 }
 
-void destroyQueue(queue *q)
+void *queueFind(queue *q, void *toFind, int (*compare)(void *, void *), int *E_QUEUE)
 {
-	clearQueue(q);
+	eq_z(q, E_QUEUE_INVARG, { return NULL; });
+
+	int (*cmpfunc)(void *, void *);
+	if (compare == NULL)
+		cmpfunc = q->compare;
+	else
+		cmpfunc = compare;
+
+	data *curr = q->head;
+	while (curr && !(cmpfunc(curr->data, toFind)))
+		curr = curr->next;
+
+	if (curr)
+		return curr->data;
+	return NULL;
+}
+
+void *queueRemove(queue *q, void *toRemove, int (*compare)(void *, void *), int *E_QUEUE)
+{
+
+	eq_z(q, E_QUEUE_INVARG, { return NULL; });
+
+	int (*cmpfunc)(void *, void *);
+	if (compare == NULL)
+		cmpfunc = q->compare;
+	else
+		cmpfunc = compare;
+
+	data *curr = q->head;
+	while (curr && !(cmpfunc(curr->data, toRemove)))
+		curr = curr->next;
+
+	if (!curr)
+		return NULL; // se non c'è nella lista, fine
+	// altrimenti aggiustiamo i pointer a prec e next
+
+	if (!curr->prev)
+	{ // curr testa
+		q->head = curr->next;
+	}
+	else
+	{
+		curr->prev->next = curr->next;
+	}
+	if (!curr->next)
+	{ // curr coda
+		q->tail = curr->prev;
+	}
+	else
+	{
+		curr->next->prev = curr->prev;
+	}
+
+	void *toRet = curr->data;
+	free(curr);
+	q->size--;
+	return toRet;
+}
+
+void queueDestroy(queue *q, int *E_QUEUE)
+{
+	eq_z(q, E_QUEUE_INVARG, { return; });
+
+	queueClear(q, E_QUEUE);
 	free(q);
 }

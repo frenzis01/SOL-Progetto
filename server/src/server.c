@@ -48,9 +48,9 @@ void *dispatcher(void *arg)
     sa.sun_family = AF_UNIX;
 
     // EXIT_FAILURE o return -1 ???
-    ec_neg1(fd_skt = socket(AF_UNIX, SOCK_STREAM, 0));
-    ec_neg1(bind(fd_skt, (struct sockaddr *)&sa, sizeof(sa)));
-    ec_neg1(listen(fd_skt, SOMAXCONN));
+    ec_neg1(fd_skt = socket(AF_UNIX, SOCK_STREAM, 0), {});
+    ec_neg1(bind(fd_skt, (struct sockaddr *)&sa, sizeof(sa)), {});
+    ec_neg1(listen(fd_skt, SOMAXCONN), {});
 
     FD_ZERO(&set);
     FD_SET(fd_skt, &set);
@@ -74,7 +74,7 @@ void *dispatcher(void *arg)
     {
         // pthread_mutex_unlock(&mutex);
         read_set = set;
-        ec_neg1((sel_ret = select(fd_hwm + 1, &read_set, NULL, NULL, NULL /*&timeout*/)));
+        ec_neg1((sel_ret = select(fd_hwm + 1, &read_set, NULL, NULL, NULL /*&timeout*/)), {});
         /* if (sel_ret == 0)
         {
             continue; // skippi alla prossima iterazione del ciclo
@@ -86,7 +86,7 @@ void *dispatcher(void *arg)
             {
                 if (fd == fd_skt && myShutdown == 0)
                 {
-                    ec_neg1(fd_c = accept(fd_skt, NULL, 0));
+                    ec_neg1(fd_c = accept(fd_skt, NULL, 0), {});
                     // activeConnections++;
                     FD_SET(fd_c, &set);
                     if (fd_c > fd_hwm)
@@ -124,7 +124,7 @@ void *dispatcher(void *arg)
                         fd_hwm--;
 
                     ec_nz(pthread_mutex_lock(&lockReq), {});
-                    queueEnqueue(requests, fd, &myerr);
+                    // TODO queueEnqueue(requests, fd, &myerr);
                     ec_nz(pthread_cond_signal(&condReq), {});
                     ec_nz(pthread_mutex_unlock(&lockReq), {});
                 }
@@ -147,7 +147,7 @@ void *worker(void *args)
         ec_nz(pthread_mutex_lock(&lockReq), {});
 
         ec_nz(pthread_cond_wait(&condReq, &lockReq), {}); // wait for requests
-        fd = queueDequeue(requests, &myerr);
+        // TODO fd = queueDequeue(requests, &myerr);
         ec_nz(pthread_mutex_unlock(&lockReq), {});
 
         // Parsing Nightmare
@@ -167,7 +167,7 @@ ServerData readConfig(char *configPath)
     // INIT STATS
 
     FILE *conf;
-    ec(conf = fopen(configPath, "r"), NULL);
+    ec(conf = fopen(configPath, "r"), NULL, {});
 
     conf_sizet(conf, "workers", &new.workers);
     fseek(conf, 0, SEEK_SET);

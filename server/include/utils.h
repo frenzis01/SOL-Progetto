@@ -3,50 +3,52 @@
 
 #include <server.h>
 
-#define ec(s, r)            \
-    puts(#s);               \
-    if ((s) == (r))         \
-    {                       \
-        perror(#s);         \
-        exit(EXIT_FAILURE); \
-    }
-
-#define ec_nz(s,c)            \
-    puts(#s);               \
-    if (s)                  \
-    {                       \
-        perror(#s);         \
-        c; \
-    }
-
-#define re_neg1(s)   \
-    puts(#s);        \
-    if ((s) == (-1)) \
-    {                \
-        perror(#s);  \
-        return -1;   \
-    }
-
-#define ec_neg1(s)          \
-    if ((s) == (-1))        \
-    {                       \
-        perror(#s);         \
-        exit(EXIT_FAILURE); \
-    }
-
-#define mye_z(s, x)  \
-    if (!(s)) \
-    {                \
-        myerr = x;   \
-        perror(#s);  \
-    }
-
-#define nz_do(s, x) \
-    if ((s))        \
+#define ec(s, r, c) \
+    /*puts(#s);*/       \
+    if ((s) == (r)) \
     {               \
-        x        \
+        perror(#s); \
+        c;          \
     }
 
+#define ec_n(s, r, c) \
+    /*puts(#s);*/       \
+    if ((s) != (r)) \
+    {               \
+        perror(#s); \
+        c;          \
+    }
+
+#define ec_nz(s, c) \
+    puts(#s);       \
+    if (s)          \
+    {               \
+        perror(#s); \
+        c;          \
+    }
+
+#define ec_neg1(s, c) \
+    /*puts(#s);*/         \
+    if ((s) == (-1))  \
+    {                 \
+        perror(#s);   \
+        c;            \
+    }
+
+#define ec_z(s, c)  \
+    /*puts(#s);*/       \
+    if (!(s))       \
+    {               \
+        perror(#s); \
+        c;          \
+    }
+
+#define mye_z(s, x) \
+    if (!(s))       \
+    {               \
+        myerr = x;  \
+        perror(#s); \
+    }
 ssize_t /* Read "n" bytes from a descriptor */
 readn(int fd, void *ptr, size_t n);
 

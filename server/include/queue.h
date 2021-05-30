@@ -56,4 +56,8 @@ void *queueFind(queue *q, void *toFind, int (*compare)(void *, void *), int *E_Q
 
 void *queueRemove(queue *q, void *toRemove, int (*compare)(void *, void *), int *E_QUEUE);
 
+void queueCallback(queue *q, void (callback)(void *));
+
+void *queueRemove_node(queue *q, data *toRemove, int *E_QUEUE);
+
 #endif

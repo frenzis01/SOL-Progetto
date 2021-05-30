@@ -6,7 +6,7 @@
 #define errnoCHK                                                       \
     if (errno)                                                         \
     {                                                                  \
-        nz_do(pthread_mutex_unlock(&mutex), { myerr = E_LOG_MUTEX; }); \
+        ec_nz(pthread_mutex_unlock(&mutex), { myerr = E_LOG_MUTEX; }); \
         *error = myerr;                                                \
         return;                                                        \
     }
@@ -14,11 +14,11 @@
 void LoggerCreate(int *error, char *path)
 {
     int myerr = 0;
-    nz_do(pthread_mutex_lock(&mutex), { myerr = E_LOG_MUTEX; });
+    ec_nz(pthread_mutex_lock(&mutex), { myerr = E_LOG_MUTEX; });
     // se il logger esiste già, fine
     if (logger)
     {
-        nz_do(pthread_mutex_unlock(&mutex), { myerr = E_LOG_MUTEX; });
+        ec_nz(pthread_mutex_unlock(&mutex), { myerr = E_LOG_MUTEX; });
         return;
     }
 
@@ -51,24 +51,24 @@ void LoggerCreate(int *error, char *path)
         return;
     }
 
-    nz_do(pthread_mutex_unlock(&mutex), { myerr = E_LOG_MUTEX; });
+    ec_nz(pthread_mutex_unlock(&mutex), { myerr = E_LOG_MUTEX; });
     return;
 }
 
 void LoggerDelete(int *error)
 {
     int myerr = 0;
-    nz_do(pthread_mutex_lock(&mutex), { myerr = E_LOG_MUTEX; });
+    ec_nz(pthread_mutex_lock(&mutex), { myerr = E_LOG_MUTEX; });
     if (!myerr)
     {
-        nz_do(fclose(logger->file), { myerr = E_LOG_FILE; }); // e se fallisse?
+        ec_nz(fclose(logger->file), { myerr = E_LOG_FILE; }); // e se fallisse?
     }
     if (!myerr)
     {
         free(logger->buf);
         free(logger);
         logger = NULL;
-        nz_do(pthread_mutex_unlock(&mutex), { myerr = E_LOG_MUTEX; });
+        ec_nz(pthread_mutex_unlock(&mutex), { myerr = E_LOG_MUTEX; });
     }
     *error = myerr;
     return;
@@ -92,7 +92,7 @@ void LoggerLog(char *buf, size_t len, int *error)
         return;
     };
 
-    nz_do(pthread_mutex_lock(&mutex), { myerr = E_LOG_MUTEX; });
+    ec_nz(pthread_mutex_lock(&mutex), { myerr = E_LOG_MUTEX; });
     if (!myerr)
     {
         // Aggiungiamo il timestamp e poi il buf
@@ -121,7 +121,7 @@ void LoggerLog(char *buf, size_t len, int *error)
 
         // ts non va deallocato! "free(ts)" esplode
     }
-    nz_do(pthread_mutex_unlock(&mutex), { myerr = E_LOG_MUTEX; });
+    ec_nz(pthread_mutex_unlock(&mutex), { myerr = E_LOG_MUTEX; });
     free(asctime_buf);
     free(lcltime_res);
 
@@ -132,14 +132,14 @@ void LoggerLog(char *buf, size_t len, int *error)
 void LoggerFlush(int *error)
 {
     int myerr = 0;
-    nz_do(pthread_mutex_lock(&mutex), { myerr = E_LOG_MUTEX; });
+    ec_nz(pthread_mutex_lock(&mutex), { myerr = E_LOG_MUTEX; });
     if (!myerr)
     {
         fprintf(logger->file, "%s", logger->buf);
         *(logger->buf) = '\0';
         logger->bufLen = 0; // il '\0' non va contato nella lunghezza (?)
 
-        nz_do(pthread_mutex_unlock(&mutex), { myerr = E_LOG_MUTEX; });
+        ec_nz(pthread_mutex_unlock(&mutex), { myerr = E_LOG_MUTEX; });
     }
     *error = myerr;
     return;

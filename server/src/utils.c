@@ -28,8 +28,7 @@ readn(int fd, void *ptr, size_t n)
         ptr += nread;
     }
     puts("fineciclo");
-    // puts("ritorna readn");
-    return (n - nleft); /* return >= 0 */
+    return (n - nleft); /* return >= 0  (bytes read) */
 }
 
 ssize_t /* Write "n" bytes to a descriptor */
@@ -90,10 +89,10 @@ int myRead(const char *path, char *buf, size_t bufSize)
 {
     // path assoluto richiesto
     int fd, bytesRead;
-    re_neg1(fd = open(path, O_RDONLY)); // e se venisse interrotta da un segnale?
+    ec_neg1(fd = open(path, O_RDONLY),return -1); // e se venisse interrotta da un segnale?
     // if (fd = open(path,O_RDONLY)) return 0;
-    re_neg1(bytesRead = readn(fd, buf, bufSize));
-    re_neg1(close(fd)); // e se venisse interrotta da un segnale?
+    ec_neg1(bytesRead = readn(fd, buf, bufSize),return -1);
+    ec_neg1(close(fd),return -1); // e se venisse interrotta da un segnale?
     return bytesRead;
 }
 

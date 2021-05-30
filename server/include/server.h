@@ -30,8 +30,10 @@
 // #include <sys/mman.h>
 
 
-#include<logger.h>
+#include <filesys.h>
+#include <logger.h>
 #include <utils.h>
+#include <icl_hash.h>
 
 #define PATH_LENGTH 2048
 
@@ -49,55 +51,20 @@ typedef struct
     // size_t maxSizeReached;
 } ServerData;
 
-typedef struct {
-    pid_t pid;
-    int fd;
-    queue *opened;
-    queue *locked; // actually locked or pending ?
-} Client;
 
-typedef struct nodo {
-    char *path;
-    char *content;
-    size_t size;
-
-    int fdCanWrite; // 0 : no one
-                    // !0 : fd di client che ha fatto openFile(O_CREAT,O_LOCK)
-
-    // Client lockedBy; // Client che ha lockato il file
-    int lockedBy;   // 
-    queue *lockersPending; // FIFO di Client che attendono la lock
-    queue *openBy;
-
-    int readers; // Per condition variable
-    int writers; // se c'è un writer attivo
-
-    pthread_cond_t go;
-    // mutua esclusione sul singolo file
-    pthread_mutex_t mutex;
-    pthread_mutex_t ordering;
-
-    // struct nodo *prev;
-    // struct nodo *next;
-} fnode;
 
 typedef struct {
-    // fnode *head;
-    // fnode *tail;
-    queue *files;
+    int op;         // mandatory
+    char *path;     // mandatory
+    char *append;   // buf to be appended
+    char *dirname;  // dir for evicted file
+    int flags;  // O_CREAT and O_LOCK
+    int nfiles; // per readNfiles
 
-    pthread_mutex_t lockStore;
-
-    size_t currNfiles;
-    size_t currSize;
+    size_t pathLen; 
+    size_t appendLen;
+    size_t dirnameLen;
     
-    size_t maxNfiles;
-    size_t maxSize;
-} FileSystem;
-
-// Serve davvero ? O facciamo leggere tutto al worker?
-typedef struct {
-    char *query;
     Client client;
 } Request;
 

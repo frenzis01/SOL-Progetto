@@ -157,11 +157,10 @@ void *queueRemove(queue *q, void *toRemove, int (*compare)(void *, void *), int 
 
 	eq_z(q, E_QUEUE_INVARG, { return NULL; });
 
-	int (*cmpfunc)(void *, void *);
-	if (compare == NULL)
-		cmpfunc = q->compare;
-	else
+	int (*cmpfunc)(void *, void *) = q->compare;
+	if (compare)
 		cmpfunc = compare;
+
 
 	data *curr = q->head;
 	while (curr && !(cmpfunc(curr->data, toRemove)))
@@ -189,7 +188,46 @@ void *queueRemove(queue *q, void *toRemove, int (*compare)(void *, void *), int 
 	}
 
 	void *toRet = curr->data;
+	//q->freeValue(curr);
 	free(curr);
+	curr = NULL;
+	q->size--;
+	return toRet;
+}
+
+void queueCallback(queue *q, void (callback)(void *)) {
+	data  *curr= q->head;
+	while (curr){
+		callback(curr->data);
+		curr = curr->next;
+	}
+}
+
+void *queueRemove_node(queue *q, data *toRemove, int *E_QUEUE)
+{
+	eq_z(q, E_QUEUE_INVARG, { return NULL; });
+
+	eq_z(toRemove, E_QUEUE_INVARG, { return NULL; });
+
+	if (!toRemove->prev)
+	{ // toRemove testa
+		q->head = toRemove->next;
+	}
+	else
+	{
+		toRemove->prev->next = toRemove->next;
+	}
+	if (!toRemove->next)
+	{ // toRemove coda
+		q->tail = toRemove->prev;
+	}
+	else
+	{
+		toRemove->next->prev = toRemove->prev;
+	}
+
+	void *toRet = toRemove->data;
+	free(toRemove);
 	q->size--;
 	return toRet;
 }

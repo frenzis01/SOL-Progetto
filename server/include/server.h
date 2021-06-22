@@ -22,11 +22,12 @@
 // #include <time.h>
 #include <unistd.h>
 // #include <sys/wait.h>
-// #include <pthread.h>
-// #include <sys/socket.h>
-// #include <sys/un.h>
-// #include <signal.h>
-// #include <poll.h>
+#include <pthread.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <signal.h>
+#include <poll.h>
+#include <sys/select.h>
 // #include <sys/mman.h>
 
 
@@ -43,6 +44,7 @@ typedef struct
     size_t workers;
     size_t capacity;
     size_t nfiles;
+    size_t evictPolicy;
     char *sockname;
 
     // stats
@@ -71,8 +73,6 @@ typedef struct {
 // Server Data
 ServerData serverData;
 
-// Storage
-FileSystem store;
 
 void *worker(void *arg);
 

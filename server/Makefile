@@ -1,13 +1,13 @@
 CC		=  gcc
-CFLAGS	        = -g 
+CFLAGS	        = -g -std=c99
 # gli includes sono nella directory include
 INCDIR          = ./include
 # cerco gli include oltre che in INCDIR anche nella dir. corrente
 INCLUDES	= -I $(INCDIR)
 TARGETS	= 	bin/filesys \
 			bin/test
-LIBS = -L ./lib -lqueue -lutils -lserver -llogger -lm -lfilesys -licl_hash#-lm è per math.h
-LIBS_SERVER = -L ./lib -lqueue -lutils -llogger -lfilesys -licl_hash
+LIBS = -L ./lib -lqueue -lutils -lserver -llogger -lm -lfilesys -licl_hash -lpthread #-lm è per math.h
+LIBS_SERVER = -L ./lib -lqueue -lutils -llogger -lfilesys -licl_hash -lpthread
 LIBS_SERVER_SO = lib/libqueue.so lib/libutils.so lib/liblogger.so lib/libfilesys.so lib/libicl_hash.so
 .PHONY: clean
 .SUFFIXES: .c .h
@@ -19,7 +19,13 @@ bin/test:	test.c lib/libserver.so
 
 bin/filesys: test/test_filesys.c lib/libfilesys.so lib/libserver.so
 	#filesys
+	rm -f log.txt
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' $(LIBS)
+
+bin/mt_filesys: test/mt_filesys.c lib/libfilesys.so lib/libserver.so
+	#filesys multithread
+	rm -f log.txt
+	$(CC) $(CFLAGS) -fno-stack-protector $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' $(LIBS)
 
 lib/%.o: ./src/%.c
 	$(CC) $(CFLAGS) $(INCLUDES) -c -fPIC -o $@ $<

@@ -3,13 +3,18 @@
 #include <string.h>
 #include <utils.h>
 #include <server.h>
-
+#include <errno.h>
 #include <math.h> // calculate size_t->char[] len
-
 #include <assert.h>
 
+#define ANSI_COLOR_CYAN    "\x1b[36m"
+#define ANSI_COLOR_RESET   "\x1b[0m"
+#define MSG_PERROR(s) perror(ANSI_COLOR_CYAN s ANSI_COLOR_RESET);
+#define ONLY_MSG_ERR ANSI_COLOR_CYAN "INTERNAL" ANSI_COLOR_RESET
+
+
 // READ CONFIG FILE
-#define TEST_LOG
+// #define TEST_LOG
 #define TEST_FILESYS
 #define LOG_TEST 16384
 
@@ -17,16 +22,16 @@ void initPaths(char **paths);
 void initClients(Client **clients);
 void initEvicted(evictedFile **evicted);
 void freeArr(void **arr, size_t n, void (*myfree)(void *arg));
-void freeEvicted(void *arg);
 
 int main(void)
 {
     int myerr = 0;
+
 // TEST FILESYSTEM
-#ifdef TEST_FILESYS
 #define NCLIENTS 4
 #define NFILES 10
 #define FDSTART 20
+#ifdef TEST_FILESYS
 
     // Create some clients
     Client *clients[NCLIENTS];
@@ -41,7 +46,7 @@ int main(void)
     initClients(clients);
     initEvicted(evicted);
 
-    storeInit(100, 100);
+    storeInit(100, 100, 1);
 
     // OPENFILE O_CREAT,O_LOCK
     assert(!openFile(paths[0], 1, 1, clients[0], &evicted[0]));
@@ -83,7 +88,7 @@ int main(void)
     // puts("\tREADNFILES RESULT");
     // queueCallback(readFiles,printEvicted);
     // puts("\tREADNFILES END");s
-    queueDestroy(readFiles, &myerr);
+    queueDestroy(readFiles);
 
     // APPENDTOFILE
     assert(!appendToFile(paths[0], MSG, strlen(MSG) + 1, clients[0], &evictedfiles, 0));
@@ -93,9 +98,10 @@ int main(void)
     //puts("\tREADNFILES RESULT");
     //queueCallback(readFiles,printEvicted);
     //puts("\tREADNFILES END");
-    queueDestroy(readFiles, &myerr);
+    queueDestroy(readFiles);
 
     // REMOVEFILE
+    
     assert(!removeFile(paths[0], clients[0], &evicted[0]));
     assert(!errno);
     // printEvicted(evicted[0]);
@@ -122,8 +128,8 @@ int main(void)
 
     // CLOSEFILE
     assert(closeFile(paths[1], clients[1]) == 0);
-    assert(closeFile(paths[1], clients[1]) == -1); // EACCES
-    assert(closeFile(paths[1], clients[3]) == -1);
+    assert(closeFile(paths[1], clients[1]) == 1); // EACCES
+    assert(closeFile(paths[1], clients[3]) == 1); // EACCES
 
     assert(!lockFile(paths[2], clients[2]));
     assert(!unlockFile(paths[2], clients[2]));
@@ -136,32 +142,35 @@ int main(void)
     puts("---------- EVICTION TEST");
     initEvicted(evicted);
 
-    storeInit(5, 30);
+    storeInit(5, 30, 1);
 
     // OPENFILE senza O_LOCK
     puts("PUSHING 10 files BUT maxSize = 5");
     for (size_t i = 1; i < NFILES; i++)
     {
-        printf("%ld\n", store.currNfiles);
+        // printf("%ld\n", store.currNfiles);
         // queueCallback(store.files,printFnode); //LRU ok!
         assert(!openFile(paths[i], 1, 0, clients[i % NCLIENTS], &evicted[0]));
         if (evicted[0])
         {
             printEvicted(evicted[0]);
-            free(evicted[0]);
+            freeEvicted(evicted[0]);
         }
     }
     queueCallback(store.files, printFnode); //LRU ok!
+
+    puts("debug");
+    assert(0 == lockFile(paths[5],clients[1]));
+    assert(1 == lockFile(paths[5],clients[2]));
+    assert(1 == lockFile(paths[5],clients[3]));
 
     // only five file files are in the storage
     // strlen(MSG) == 14
     assert(0 == appendToFile(paths[5], MSG, strlen(MSG) + 1, clients[5 % NCLIENTS], &evictedfiles, 0));
     assert(0 == appendToFile(paths[5], MSG, strlen(MSG) + 1, clients[5 % NCLIENTS], &evictedfiles, 0));
     assert(0 == appendToFile(paths[6], MSG, strlen(MSG) + 1, clients[6 % NCLIENTS], &evictedfiles, 0));
-    // assert(1 == cmpPathChar(((evictedFile*)(queue(evictedfiles,&myerr)))->path,paths[5]));
-    queueCallback(evictedfiles, printEvicted);
-    queueDestroy(evictedfiles,&myerr);
-
+    queueCallback(evictedfiles, printEvicted); //
+    queueDestroy(evictedfiles);
 
     storeDestroy();
 
@@ -173,11 +182,15 @@ int main(void)
 #endif
 
 // TEST LOG
-#ifdef LOGTEST
-    int myerr = 0;
-    LoggerCreate(&myerr, "log.txt");
-    LoggerLog("FIRST LINE ", strlen("FIRST LINE "), &myerr);
-    LoggerFlush(&myerr);
+#ifdef TEST_LOG
+    errno = 0;
+    LoggerCreate("log.txt");
+    perror("OK?");
+    LoggerLog("FIRST LINE ", strlen("FIRST LINE "));
+    perror("OK?");
+    LoggerFlush();
+    perror("OK?");
+
 
     for (size_t i = 1; i < LOG_TEST; i++)
     {
@@ -187,13 +200,15 @@ int main(void)
         sprintf(nbuf, "%ld", i);
         strcat(buf, nbuf);
 
-        LoggerLog(buf, strlen(buf), &myerr);
+        LoggerLog(buf, strlen(buf));
     }
-    LoggerFlush(&myerr);
+    LoggerFlush();
 
-    LoggerDelete(&myerr);
+    LoggerDelete();
 #endif
     printf("FINE ERRNO=%d\n", errno);
+    MSG_PERROR("messaggio");
+    perror(ONLY_MSG_ERR);
     return 0;
 }
 

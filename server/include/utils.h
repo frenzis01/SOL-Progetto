@@ -2,9 +2,11 @@
 #define UTILS_H
 
 #include <server.h>
+#include <signal.h>
+
 
 #define ec(s, r, c) \
-    /*puts(#s);*/       \
+    /*puts(#s);*/   \
     if ((s) == (r)) \
     {               \
         perror(#s); \
@@ -12,14 +14,15 @@
     }
 
 #define ec_n(s, r, c) \
-    /*puts(#s);*/       \
-    if ((s) != (r)) \
-    {               \
-        perror(#s); \
-        c;          \
+    /*puts(#s);*/     \
+    if ((s) != (r))   \
+    {                 \
+        perror(#s);   \
+        c;            \
     }
 
 #define ec_nz(s, c) \
+    /*puts(#s);*/   \
     puts(#s);       \
     if (s)          \
     {               \
@@ -28,7 +31,7 @@
     }
 
 #define ec_neg1(s, c) \
-    /*puts(#s);*/         \
+    /*puts(#s);*/     \
     if ((s) == (-1))  \
     {                 \
         perror(#s);   \
@@ -36,7 +39,7 @@
     }
 
 #define ec_z(s, c)  \
-    /*puts(#s);*/       \
+    /*puts(#s);*/   \
     if (!(s))       \
     {               \
         perror(#s); \
@@ -65,7 +68,7 @@ char *conf_string(FILE *file, char const *desired_name);
 
 int conf_sizet(FILE *file, char const *desired_name, size_t *ret);
 
-sigset_t initSigMask();
+// sigset_t initSigMask();
 
 int max(int args, ...);
 

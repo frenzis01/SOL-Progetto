@@ -2,13 +2,29 @@
 #include <queue.h>
 #include <string.h>
 #include <stdio.h>
+#include <errno.h>
 
-#define eq_z(s, x, c) \
+#define eq_z(s, e, c) \
 	if (!(s))         \
 	{                 \
-		*E_QUEUE = x; \
+		errno = e;    \
 		c;            \
 		perror(#s);   \
+	}
+
+#define eo(s, c)      \
+	if (errno == (s)) \
+	{                 \
+		c;            \
+		perror(#s);   \
+	}
+
+#define eq_zOLD(s, x, c) \
+	if (!(s))            \
+	{                    \
+		*E_QUEUE = x;    \
+		c;               \
+		perror(#s);      \
 	}
 
 // int *E_QUEUE = 0;
@@ -16,10 +32,11 @@
 #define E_QUEUE_INVARG 2
 
 // allocSize inutile...
-queue *queueCreate( void (*freeValue)(void *), int (*compare)(void *, void *), int *E_QUEUE)
+queue *queueCreate(void (*freeValue)(void *), int (*compare)(void *, void *))
 {
+	errno = 0;
 	queue *q = malloc(sizeof(queue));
-	eq_z(q, E_QUEUE_MALLOC, { return NULL; });
+	eo(ENOMEM, return NULL);
 	// q->allocationSize = allocSize;
 	q->size = 0;
 	q->head = q->tail = NULL;
@@ -29,12 +46,13 @@ queue *queueCreate( void (*freeValue)(void *), int (*compare)(void *, void *), i
 	return q;
 }
 
-void queueEnqueue(queue *q, void *_data, int *E_QUEUE)
+void queueEnqueue(queue *q, void *_data)
 {
-	eq_z(q, E_QUEUE_INVARG, { return; });
+	errno = 0;
+	eq_z(q, EINVAL, return;);
 
 	data *toInsert = (data *)malloc(sizeof(data));
-	eq_z(toInsert, E_QUEUE_MALLOC, { return; });
+	eo(ENOMEM, return;);
 
 	// Invece di copiare il contenuto di data, assegnamo il void*
 	// 	toInsert->data = malloc(q->allocationSize);
@@ -58,10 +76,10 @@ void queueEnqueue(queue *q, void *_data, int *E_QUEUE)
 	q->size++;
 }
 
-void *queueDequeue(queue *q, int *E_QUEUE)
+void *queueDequeue(queue *q)
 {
-
-	eq_z(q, E_QUEUE_INVARG, { return NULL; });
+	errno = 0;
+	eq_z(q, EINVAL, return NULL;);
 
 	if (!(q->head))
 		return NULL;
@@ -88,20 +106,23 @@ void *queueDequeue(queue *q, int *E_QUEUE)
 	return toRet;
 }
 
-void *queuePeek(queue *q, int *E_QUEUE)
+void *queuePeek(queue *q)
 {
-	eq_z(q, E_QUEUE_INVARG, { return NULL; });
+	errno = 0;
+	eq_z(q, EINVAL, return NULL;);
 
-	if (!q->head) return NULL;
+	if (!q->head)
+		return NULL;
 	return q->head->data;
 	// memcpy(toRet, q->head->data, q->allocationSize);
 }
 
-void queueClear(queue *q, int *E_QUEUE)
+void queueClear(queue *q)
 {
-	eq_z(q, E_QUEUE_INVARG, { return; });
+	errno = 0;
+	eq_z(q, EINVAL, return;);
 
-	while (!queueIsEmpty(q, E_QUEUE))
+	while (!queueIsEmpty(q))
 	{
 		data *temp = q->head;
 		q->head = q->head->next;
@@ -112,16 +133,18 @@ void queueClear(queue *q, int *E_QUEUE)
 	}
 }
 
-size_t queueGetSize(queue *q, int *E_QUEUE)
+size_t queueGetSize(queue *q)
 {
-	eq_z(q, E_QUEUE_INVARG, { return 0; });
+	errno = 0;
+	eq_z(q, EINVAL, return 0;);
 
 	return q->size;
 }
 
-_Bool queueIsEmpty(queue *q, int *E_QUEUE)
+_Bool queueIsEmpty(queue *q)
 {
-	eq_z(q, E_QUEUE_INVARG, { return 1; });
+	errno = 0;
+	eq_z(q, EINVAL, return 1;);
 
 	if (q->size == 0)
 	{
@@ -133,17 +156,18 @@ _Bool queueIsEmpty(queue *q, int *E_QUEUE)
 	}
 }
 
-void *queueFind(queue *q, void *toFind, int (*compare)(void *, void *), int *E_QUEUE)
+void *queueFind(queue *q, void *toFind, int (*compare)(void *, void *))
 {
-	eq_z(q, E_QUEUE_INVARG, { return NULL; });
+	errno = 0;
+	eq_z(q, EINVAL, return NULL;);
 
-	int (*cmpfunc)(void *, void *);
-	if (compare == NULL)
-		cmpfunc = q->compare;
-	else
+	int (*cmpfunc)(void *, void *) = q->compare;
+	if (compare)
 		cmpfunc = compare;
 
 	data *curr = q->head;
+
+	// NB cmpfunc potrebbe sporcare errno
 	while (curr && !(cmpfunc(curr->data, toFind)))
 		curr = curr->next;
 
@@ -152,16 +176,16 @@ void *queueFind(queue *q, void *toFind, int (*compare)(void *, void *), int *E_Q
 	return NULL;
 }
 
-void *queueRemove(queue *q, void *toRemove, int (*compare)(void *, void *), int *E_QUEUE)
+void *queueRemove(queue *q, void *toRemove, int (*compare)(void *, void *))
 {
-
-	eq_z(q, E_QUEUE_INVARG, { return NULL; });
+	errno = 0;
+	eq_z(q, EINVAL, return NULL;);
 
 	int (*cmpfunc)(void *, void *) = q->compare;
 	if (compare)
 		cmpfunc = compare;
 
-
+	// NB cmpfunc potrebbe sporcare errno
 	data *curr = q->head;
 	while (curr && !(cmpfunc(curr->data, toRemove)))
 		curr = curr->next;
@@ -195,19 +219,24 @@ void *queueRemove(queue *q, void *toRemove, int (*compare)(void *, void *), int 
 	return toRet;
 }
 
-void queueCallback(queue *q, void (callback)(void *)) {
-	data  *curr= q->head;
-	while (curr){
+void queueCallback(queue *q, void(callback)(void *))
+{
+	errno = 0;
+	eq_z(q, EINVAL, return;);
+
+	data *curr = q->head;
+	while (!errno && curr)
+	{
+		// errno might get dirty here
 		callback(curr->data);
 		curr = curr->next;
 	}
 }
 
-void *queueRemove_node(queue *q, data *toRemove, int *E_QUEUE)
+void *queueRemove_node(queue *q, data *toRemove)
 {
-	eq_z(q, E_QUEUE_INVARG, { return NULL; });
-
-	eq_z(toRemove, E_QUEUE_INVARG, { return NULL; });
+	errno = 0;
+	eq_z(q, EINVAL, return NULL;);
 
 	if (!toRemove->prev)
 	{ // toRemove testa
@@ -232,10 +261,11 @@ void *queueRemove_node(queue *q, data *toRemove, int *E_QUEUE)
 	return toRet;
 }
 
-void queueDestroy(queue *q, int *E_QUEUE)
+void queueDestroy(queue *q)
 {
-	eq_z(q, E_QUEUE_INVARG, { return; });
+	errno = 0;
+	eq_z(q, EINVAL, return;);
 
-	queueClear(q, E_QUEUE);
+	queueClear(q);
 	free(q);
 }

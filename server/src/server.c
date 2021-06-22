@@ -176,6 +176,10 @@ ServerData readConfig(char *configPath)
     conf_sizet(conf, "capacity", &new.capacity);
     fseek(conf, 0, SEEK_SET);
     new.sockname = conf_string(conf, "sockname");
+    fseek(conf, 0, SEEK_SET);
+    conf_sizet(conf, "evictPolicy", &new.evictPolicy);
+
+    if (new.evictPolicy) new.evictPolicy = 1;
 
     /* code */
 

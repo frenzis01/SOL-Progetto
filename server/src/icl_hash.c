@@ -127,8 +127,7 @@ icl_hash_find(icl_hash_t *ht, void* key)
  *
  * @returns pointer to the new item.  Returns NULL on error.
  */
-icl_entry_t *
-icl_hash_insert(icl_hash_t *ht, void* key, void *data)
+icl_entry_t *icl_hash_insert(icl_hash_t *ht, void* key, void *data)
 {
     icl_entry_t *curr;
     unsigned int hash_val;

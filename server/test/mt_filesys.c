@@ -43,7 +43,7 @@
     LoggerLog(ret, strlen(ret));
 
 void initPaths(char **paths);
-void initClients(Client **clients);
+void initClients(Client **fakeClients);
 void initEvicted(evictedFile **evicted);
 void freeArr(void **arr, size_t n, void (*myfree)(void *arg));
 Client *rClient();
@@ -59,7 +59,7 @@ void *fakeWorker(void *arg);
 #define NWORKERS 20
 
 // STUBS
-Client *clients[NCLIENTS];
+Client *fakeClients[NCLIENTS];
 char *paths[NFILES];
 
 int main(void)
@@ -69,7 +69,7 @@ int main(void)
 
     // STUBS init
     initPaths(paths);
-    initClients(clients);
+    initClients(fakeClients);
 
     LoggerCreate("log.txt");
     storeInit(100, 100, 1);
@@ -89,7 +89,7 @@ int main(void)
     // free stuff
     storeDestroy();
     freeArr((void **)paths, NFILES, NULL);
-    freeArr((void **)clients, NCLIENTS, NULL);
+    freeArr((void **)fakeClients, NCLIENTS, NULL);
     LoggerFlush();
     LoggerDelete();
 
@@ -204,13 +204,13 @@ void initEvicted(evictedFile **evicted)
     }
 }
 
-void initClients(Client **clients)
+void initClients(Client **fakeClients)
 {
     puts("InitClients");
     for (size_t i = 0; i < NCLIENTS; i++)
     {
-        assert(clients[i] = malloc(sizeof(Client)));
-        clients[i]->fd = FDSTART + i;
+        assert(fakeClients[i] = malloc(sizeof(Client)));
+        fakeClients[i]->fd = FDSTART + i;
     }
 }
 
@@ -225,7 +225,7 @@ void freeArr(void **arr, size_t n, void (*myfree)(void *arg))
 
 Client *rClient()
 {
-    return clients[rand() % NCLIENTS];
+    return fakeClients[rand() % NCLIENTS];
 }
 
 char *rFile()

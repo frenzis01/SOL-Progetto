@@ -219,6 +219,11 @@ void *queueRemove(queue *q, void *toRemove, int (*compare)(void *, void *))
 	return toRet;
 }
 
+/**
+ * executes 'callback' on every element of the queue.
+ * Stops prematurely if errno gets set
+ * @param callback must set errno only in case of error (!)
+ */
 void queueCallback(queue *q, void(callback)(void *))
 {
 	errno = 0;
@@ -233,6 +238,9 @@ void queueCallback(queue *q, void(callback)(void *))
 	}
 }
 
+/**
+ * Removes a node from the queue and returns its value
+ */
 void *queueRemove_node(queue *q, data *toRemove)
 {
 	errno = 0;

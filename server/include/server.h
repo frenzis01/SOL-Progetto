@@ -60,21 +60,23 @@ typedef struct {
     char *path;     // mandatory
     char *append;   // buf to be appended
     char *dirname;  // dir for evicted file
-    int flags;  // O_CREAT and O_LOCK
+    int o_creat, o_lock;  // O_CREAT and O_LOCK
     int nfiles; // per readNfiles
 
-    size_t pathLen; 
-    size_t appendLen;
-    size_t dirnameLen;
+    unsigned short pathLen; 
+    unsigned short appendLen;
+    unsigned short dirnameLen;
     
-    Client client;
+    Client *client;
 } Request;
 
 // Server Data
-ServerData serverData;
+icl_hash_t *clients; // ?
 
 
 void *worker(void *arg);
+
+int readConfig(char *configPath, ServerData *new);
 
 int parseRequest (char *str, Request *req);
 
@@ -85,6 +87,5 @@ void *dispatcher(void *arg);
 // Cleanup LFU
 int lfuTrasher(int size, int fd);
 
-ServerData readConfig(char *configPath);
 
 #endif

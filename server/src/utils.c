@@ -2,8 +2,10 @@
 
 #include <stdarg.h>
 
-
-ssize_t /* Read "n" bytes from a descriptor */
+/** Read "n" bytes from a descriptor 
+ * @returns bytes read (n - nleft), -1 on error
+*/
+ssize_t 
 readn(int fd, void *ptr, size_t n)
 {
     size_t nleft;
@@ -100,6 +102,10 @@ int myRead(const char *path, char *buf, size_t bufSize)
 // READ CONFIG FILE
 // TEST OK
 
+/**
+ * Finds a char* value after a "[string]="
+ * @returns NULL on error, desired string on success
+ */
 char *conf_string(FILE *file, char const *desired_name) { 
     char name[128];
     char val[128];
@@ -112,8 +118,14 @@ char *conf_string(FILE *file, char const *desired_name) {
     return NULL;
 }
 
+
+/**
+ * Finds a size_t value after a "[string]="
+ * @returns -1 on error, desired string on success
+ */
 int conf_sizet(FILE *file, char const *desired_name, size_t *ret) {
     char *temp = conf_string(file, desired_name);
+    if (!temp) return -1;
 
     char *stop;
     *ret = strtol(temp, &stop, 10);

@@ -55,13 +55,13 @@ typedef struct {
 FileSystem store;
 
 // filesys
+int openFile(char *path, int createF, int lockF, Client *client, evictedFile **evicted); /*fnode **toRet,*/
+
 int readFile(char *path, evictedFile **toRet, Client *client, _Bool readN);
 
 int readNfiles(int n, queue **toRet, Client *client);
 
 int appendToFile(char *path, char *content, size_t size, Client *client, queue **evicted, int writeFlag);
-
-int openFile(char *path, int createF, int lockF, Client *client, evictedFile **evicted); /*fnode **toRet,*/
 
 int lockFile(char *path, Client *client);
 

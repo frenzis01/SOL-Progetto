@@ -350,7 +350,7 @@ int appendToFile(char *path, char *content, size_t size, Client *client, queue *
     if (size + fptr->size > store.maxSize)
     {
         errno = EFBIG;
-        failure = -1;
+        failure = 1;
     }
     else
     {
@@ -888,27 +888,6 @@ fnode *initFile(char *path)
     return fptr;
 }
 
-int storeInit(size_t maxNfiles, size_t maxSize, size_t evictPolicy)
-{
-    // TODO safe assumere che venga chiamata una sola volta?
-    errno = 0;
-    store.fdict = NULL;
-
-    pthread_mutex_init(&(store.lockStore), NULL);
-    eo(storeDestroy(); return -1;); // if files or fdict is NULL it's not a problem
-    store.files = queueCreate(freeFile, cmpFile);
-    eo(storeDestroy(); return -1;);
-    store.fdict = icl_hash_create(maxNfiles, NULL, cmpPathChar);
-    eo(storeDestroy(); return -1;);
-    store.maxNfiles = maxNfiles;
-    store.maxSize = maxSize;
-    store.currNfiles = 0;
-    store.currSize = 0;
-    store.evictPolicy = evictPolicy;
-
-    return 0;
-}
-
 _Bool storeIsEmpty()
 {
     if (store.currNfiles == 0)
@@ -1187,6 +1166,30 @@ void freeEvicted(void *p)
     arg->path = NULL;
     arg->notifyLockers = NULL;
     free(arg);
+}
+
+/**
+ * @returns -1 on error, 0 success
+ */
+int storeInit(size_t maxNfiles, size_t maxSize, size_t evictPolicy)
+{
+    // TODO safe assumere che venga chiamata una sola volta?
+    errno = 0;
+    store.fdict = NULL;
+
+    pthread_mutex_init(&(store.lockStore), NULL);
+    eo(storeDestroy(); return -1;); // if files or fdict is NULL it's not a problem
+    store.files = queueCreate(freeFile, cmpFile);
+    eo(storeDestroy(); return -1;);
+    store.fdict = icl_hash_create(maxNfiles, NULL, cmpPathChar);
+    eo(storeDestroy(); return -1;);
+    store.maxNfiles = maxNfiles;
+    store.maxSize = maxSize;
+    store.currNfiles = 0;
+    store.currSize = 0;
+    store.evictPolicy = evictPolicy;
+
+    return 0;
 }
 
 int storeDestroy()

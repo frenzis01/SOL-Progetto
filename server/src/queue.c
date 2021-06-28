@@ -229,7 +229,7 @@ void *queueRemove(queue *q, void *toRemove, int (*compare)(void *, void *))
 int queueCallback(queue *q, void(callback)(void *))
 {
 	errno = 0;
-	eq_z(q, EINVAL, return;);
+	eq_z(q, EINVAL, return 0;);
 
 	data *curr = q->head;
 	while (!errno && curr)

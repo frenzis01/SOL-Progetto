@@ -1,13 +1,16 @@
 #ifndef LOGGER_H
 #define LOGGER_H
 
-#include <utils.h>
+#define _POSIX_C_SOURCE 200809L
 
+#include <errno.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <pthread.h>
 #include <time.h>
 #include <limits.h>
+#include <string.h>
+#include <stdlib.h>
 
 #define E_LOG_MALLOC 1
 #define E_LOG_FILE 2

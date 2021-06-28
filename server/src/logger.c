@@ -1,7 +1,6 @@
 #include <logger.h>
-#include <errno.h>
 
-#define eq_z(s, e, c)   \
+#define ec_z_se(s, e, c)   \
     if (!errno && !(s)) \
     {                   \
         errno = e;      \
@@ -38,7 +37,7 @@ void SimpleFlush();
 void LoggerCreate(char *path)
 {
     errno = 0;
-    eq_z(path, EINVAL, return );
+    ec_z_se(path, EINVAL, return );
 
     ec_nz_l(LOCK, return );
     // se il logger esiste già, fine

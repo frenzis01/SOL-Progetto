@@ -84,9 +84,10 @@ queue *requests;
 
 volatile sig_atomic_t myShutdown = 0;
 
-#define LOG_PATH "../log.txt"
+#define LOG_PATH "log.txt"
 #define STARTUP_MSG "SERVER STARTUP"
 #define CLEANEXIT_MSG "SERVER SHUTDOWN"
+#define H_BUCKETS 2048
 
 #define HARSH_QUIT 2
 #define HUP_QUIT 1
@@ -97,15 +98,14 @@ volatile sig_atomic_t myShutdown = 0;
 
 void removeSocket()
 {
+    unlink(sockName);
     icl_hash_destroy(clients, NULL, NULL);
     storeDestroy();
-    unlink(sockName);
 }
 
 int main(void)
 {
 
-    atexit(removeSocket); // we do not care if they were uninitialized
 
     // char cwd[PATH_MAX];
     // if (getcwd(cwd, sizeof(cwd)) != NULL)
@@ -128,8 +128,11 @@ int main(void)
     ServerData meta;
     ec_neg1(readConfig(CONFIG_PATH, &meta), exit(EXIT_FAILURE));
     ec_neg1(storeInit(meta.nfiles, meta.capacity, meta.evictPolicy), exit(EXIT_FAILURE));
+    ec_z(clients = icl_hash_create(H_BUCKETS,NULL,NULL), exit(EXIT_FAILURE));
     size_t poolSize = meta.workers;
     sockName = meta.sockname; // declared in conn.h
+    
+    atexit(removeSocket); // we do not care if they were uninitialized
 
     eo_af(LoggerCreate(LOG_PATH), storeDestroy(); exit(EXIT_FAILURE););
     eo_af(LoggerLog(STARTUP_MSG, strlen(STARTUP_MSG)), storeDestroy(); exit(EXIT_FAILURE););
@@ -311,6 +314,7 @@ void *signalHandler(void *args)
         break;
     case SIGHUP:
         myShutdown = HUP_QUIT;
+        close(SIGNAL_WRITE);
         break;
     default:
         break;

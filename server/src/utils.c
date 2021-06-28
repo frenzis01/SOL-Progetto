@@ -107,12 +107,15 @@ int myRead(const char *path, char *buf, size_t bufSize)
  * @returns NULL on error, desired string on success
  */
 char *conf_string(FILE *file, char const *desired_name) { 
-    char name[128];
-    char val[128];
+    char name[128],
+     val[128],
+    *toRet = calloc(128, sizeof(char));
 
     while (fscanf(file, "%127[^=]=%127[^\n]%*c", name, val) == 2) {
         if (0 == strcmp(name, desired_name)) {
-            return strdup(val);
+            // return strdup(val);
+            strncpy(toRet,val,128);
+            return toRet;
         }
     }
     return NULL;

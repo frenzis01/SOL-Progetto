@@ -23,6 +23,7 @@ bin/mt_filesys: test/mt_filesys.c lib/libfilesys.so lib/libqueue.so lib/libconn.
 	$(CC) $(CFLAGS) -fno-stack-protector $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lfilesys -lqueue -lconn -llogger -lpthread
 
 bin/server: src/server.c lib/libserver.so $(INCDIR)/server.h
+	rm -f sock
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' $(LIBS)
 
 lib/%.o: ./src/%.c

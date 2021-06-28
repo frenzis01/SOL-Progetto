@@ -1,9 +1,25 @@
 #ifndef UTILS_H
 #define UTILS_H
 
-#include <server.h>
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <signal.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <limits.h>
 
+// output colors
+#define ANSI_COLOR_RED "\x1b[31m"
+#define ANSI_COLOR_GREEN "\x1b[32m"
+#define ANSI_COLOR_YELLOW "\x1b[33m"
+#define ANSI_COLOR_BLUE "\x1b[34m"
+#define ANSI_COLOR_MAGENTA "\x1b[35m"
+#define ANSI_COLOR_CYAN "\x1b[36m"
+#define ANSI_COLOR_RESET "\x1b[0m"
 
 #define ec(s, r, c) \
     /*puts(#s);*/   \
@@ -23,7 +39,6 @@
 
 #define ec_nz(s, c) \
     /*puts(#s);*/   \
-    puts(#s);       \
     if (s)          \
     {               \
         perror(#s); \
@@ -46,12 +61,36 @@
         c;          \
     }
 
-#define mye_z(s, x) \
-    if (!(s))       \
-    {               \
-        myerr = x;  \
-        perror(#s); \
+
+
+#define eq_z(s, e, c)                               \
+    if (!errno && !(s))                             \
+    {                                               \
+        errno = e;                                  \
+        perror(ANSI_COLOR_RED #s ANSI_COLOR_RESET); \
+        c;                                          \
     }
+
+#define eok(c)  \
+    if (!errno) \
+    {           \
+        c;      \
+    }
+
+#define ec_nz_f(s, c)                               \
+    if (!errno && (s))                              \
+    {                                               \
+        perror(ANSI_COLOR_RED #s ANSI_COLOR_RESET); \
+        c;                                          \
+    }
+
+#define ec_z_f(s, c)                                \
+    if (!errno && !(s))                             \
+    {                                               \
+        perror(ANSI_COLOR_RED #s ANSI_COLOR_RESET); \
+        c;                                          \
+    }
+
 ssize_t /* Read "n" bytes from a descriptor */
 readn(int fd, void *ptr, size_t n);
 

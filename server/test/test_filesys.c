@@ -1,8 +1,12 @@
-#include <stdio.h>
+#define _POSIX_C_SOURCE 200809L
+
 #include <queue.h>
+#include <conn.h>
+#include <filesys.h>
+
+#include <stdio.h>
 #include <string.h>
 #include <utils.h>
-#include <server.h>
 #include <errno.h>
 #include <math.h> // calculate size_t->char[] len
 #include <assert.h>

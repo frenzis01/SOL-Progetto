@@ -1,13 +1,9 @@
 #ifndef SERVER_H
 #define SERVER_H
 
-#include <queue.h>
-#include <pthread.h>
-#include <sys/socket.h>
-#include <sys/un.h>
-
-#define _GNU_SOURCE
+// #define _GNU_SOURCE // TODO chk per strerror
 // #define _POSIX_C_SOURCE 200112L
+#define _POSIX_C_SOURCE 200809L
 #include <sys/syscall.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -35,8 +31,10 @@
 #include <logger.h>
 #include <utils.h>
 #include <icl_hash.h>
+#include <queue.h>
+#include <conn.h>
+#include <protocol.h>
 
-#define PATH_LENGTH 2048
 
 typedef struct
 {
@@ -54,26 +52,6 @@ typedef struct
 } ServerData;
 
 
-
-typedef struct {
-    int op;         // mandatory
-    char *path;     // mandatory
-    char *append;   // buf to be appended
-    char *dirname;  // dir for evicted file
-    int o_creat, o_lock;  // O_CREAT and O_LOCK
-    int nfiles; // per readNfiles
-
-    unsigned short pathLen; 
-    unsigned short appendLen;
-    unsigned short dirnameLen;
-    
-    Client *client;
-} Request;
-
-// Server Data
-icl_hash_t *clients; // ?
-
-
 void *worker(void *arg);
 
 int readConfig(char *configPath, ServerData *new);
@@ -82,10 +60,6 @@ int parseRequest (char *str, Request *req);
 
 void *dispatcher(void *arg);
 
-// Elimina file dal server eseguendo LFU finché non c'è 'size' spazio libero
-// Predilige file che non sono stati lockati o sceglie proprio quelli?
-// Cleanup LFU
-int lfuTrasher(int size, int fd);
 
 
 #endif

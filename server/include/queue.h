@@ -3,7 +3,6 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdbool.h>
 
 typedef struct _data {
 	void * data;
@@ -26,7 +25,7 @@ queue* queueCreate(/*size_t allocSize,*/void (*freeValue)(void*),int (*compare)(
 /*
 Insert data into the queue(last position)
 */
-void queueEnqueue(queue * q, void* data);
+int queueEnqueue(queue * q, void* data);
 /*
 Remove first element of the queue of save its value to the toRet argument
 */
@@ -50,13 +49,13 @@ size_t queueGetSize(queue *q);
 /*
 Check is queue is empty
 */
-bool queueIsEmpty(queue * q);
+_Bool queueIsEmpty(queue * q);
 
 void *queueFind(queue *q, void *toFind, int (*compare)(void *, void *));
 
 void *queueRemove(queue *q, void *toRemove, int (*compare)(void *, void *));
 
-void queueCallback(queue *q, void (callback)(void *));
+int queueCallback(queue *q, void (callback)(void *));
 
 void *queueRemove_node(queue *q, data *toRemove);
 

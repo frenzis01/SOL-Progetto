@@ -46,13 +46,13 @@ queue *queueCreate(void (*freeValue)(void *), int (*compare)(void *, void *))
 	return q;
 }
 
-void queueEnqueue(queue *q, void *_data)
+int queueEnqueue(queue *q, void *_data)
 {
 	errno = 0;
-	eq_z(q, EINVAL, return;);
+	eq_z(q, EINVAL, return -1;);
 
-	data *toInsert = (data *)malloc(sizeof(data));
-	eo(ENOMEM, return;);
+	data *toInsert = malloc(sizeof(data));
+	eq_z(toInsert, errno, return -1);
 
 	// Invece di copiare il contenuto di data, assegnamo il void*
 	// 	toInsert->data = malloc(q->allocationSize);
@@ -74,6 +74,7 @@ void queueEnqueue(queue *q, void *_data)
 	}
 
 	q->size++;
+	return 0;
 }
 
 void *queueDequeue(queue *q)
@@ -223,8 +224,9 @@ void *queueRemove(queue *q, void *toRemove, int (*compare)(void *, void *))
  * executes 'callback' on every element of the queue.
  * Stops prematurely if errno gets set
  * @param callback must set errno only in case of error (!)
+ * @returns 0 success, -1 error
  */
-void queueCallback(queue *q, void(callback)(void *))
+int queueCallback(queue *q, void(callback)(void *))
 {
 	errno = 0;
 	eq_z(q, EINVAL, return;);
@@ -236,6 +238,8 @@ void queueCallback(queue *q, void(callback)(void *))
 		callback(curr->data);
 		curr = curr->next;
 	}
+	if (errno) return -1;
+	return 0;
 }
 
 /**

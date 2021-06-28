@@ -1,16 +1,7 @@
 // #define _POSIX_C_SOURCE 200112L
 #define _GNU_SOURCE
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <errno.h>
-
 #include <filesys.h>
-#include <logger.h>
-
-#include <server.h> // needed for Client*
-
 
 // ERRORS TO KEEP IN MIND
 #pragma region
@@ -37,26 +28,17 @@ EPERM
     The current thread does not own the mutex.
  * 
  */
-#pragma endregion
-
-#pragma region
-// output colors
-#define ANSI_COLOR_RED "\x1b[31m"
-#define ANSI_COLOR_GREEN "\x1b[32m"
-#define ANSI_COLOR_YELLOW "\x1b[33m"
-#define ANSI_COLOR_BLUE "\x1b[34m"
-#define ANSI_COLOR_MAGENTA "\x1b[35m"
-#define ANSI_COLOR_CYAN "\x1b[36m"
-#define ANSI_COLOR_RESET "\x1b[0m"
 
 // error messages
 #define E_DATA_INTERNAL ANSI_COLOR_RED "INTERNAL ERROR: DATA STRUCTURE FAILURE" ANSI_COLOR_RESET
 
-#define E_STR_LOCK 1
-#define E_STR_COND 2
-#define E_STR_INVARG 3
-#define E_STR_QUEUE 4
-#define E_STR_NOENT 5
+
+#define eo(c)                                              \
+    if (errno != 0)                                        \
+    {                                                      \
+        perror(E_DATA_INTERNAL); \
+        c;                                                 \
+    }
 
 #define LOCKFILE pthread_mutex_lock(&(fptr->mutex))
 #define UNLOCKFILE pthread_mutex_unlock(&(fptr->mutex))
@@ -67,41 +49,9 @@ EPERM
 #define WAITGO pthread_cond_wait(&(fptr->go), &(fptr->mutex))
 #define SIGNALGO pthread_cond_signal(&(fptr->go))
 
-#define eq_z(s, e, c)                               \
-    if (!errno && !(s))                             \
-    {                                               \
-        errno = e;                                  \
-        perror(ANSI_COLOR_RED #s ANSI_COLOR_RESET); \
-        c;                                          \
-    }
-
-#define eo(c)                                              \
-    if (errno != 0)                                        \
-    {                                                      \
-        perror(ANSI_COLOR_RED "Storage" ANSI_COLOR_RESET); \
-        c;                                                 \
-    }
-
-#define eok(c)  \
-    if (!errno) \
-    {           \
-        c;      \
-    }
-
-#define ec_nz_f(s, c)                               \
-    if (!errno && (s))                              \
-    {                                               \
-        perror(ANSI_COLOR_RED #s ANSI_COLOR_RESET); \
-        c;                                          \
-    }
-
-#define ec_z_f(s, c)                                \
-    if (!errno && !(s))                             \
-    {                                               \
-        perror(ANSI_COLOR_RED #s ANSI_COLOR_RESET); \
-        c;                                          \
-    }
 #pragma endregion
+
+#define UPDATE_MAX(m, a) a > m ? m = a : m;
 
 evictedFile *copyFnode(fnode *tmp, _Bool keepLockers);
 fnode *initFile(char *path);
@@ -375,6 +325,7 @@ int appendToFile(char *path, char *content, size_t size, Client *client, queue *
                 *evicted = storeCleaner(size, path);
             }
             eok(store.currSize += size);
+            eok(UPDATE_MAX(store.maxSizeReached, store.currSize));
 
             // PERFORM OPERATION
             eok(fptr->content = realloc(fptr->content, fptr->size + size));
@@ -785,7 +736,7 @@ int removeFile(char *path, Client *client, evictedFile **evicted)
     ec_nz_f(UNLOCKFILE, return -1);     // TODO RICORDA! NON SUPERFLUE, ALTRIMENTI QUANDO DEALLOCO
                                         // IL FILE, DISTRUGGO MUTEX SU CUI C'ERA UNA LOCK ATTIVA
                                         // (La mia, del thread che chiama removeFile)
-    
+
     // if (!O_LOCK_byClient)
     if (fptr->lockedBy != client->fd)
     {
@@ -915,8 +866,10 @@ int storeInsert(fnode *fptr)
     icl_hash_insert(store.fdict, fptr->path, store.files->tail);
     eo(queueDequeue(store.files); return -1;);
 
-    store.currSize += fptr->size;
+    store.currSize += fptr->size; // TODO this should always be 0 (?)
     store.currNfiles++;
+
+    UPDATE_MAX(store.maxNfilesReached, store.currNfiles);
 
     return 0;
 }
@@ -991,7 +944,8 @@ int isLocked(fnode *fptr)
     ec_nz(LOCKORDERING, return -1);
     ec_nz(LOCKFILE, return -1);
 
-    while (fptr->readers || fptr->writers) {
+    while (fptr->readers || fptr->writers)
+    {
         ec_nz(WAITGO, { return -1; });
     }
 
@@ -1009,7 +963,8 @@ int isEmpty(fnode *fptr)
     ec_nz(LOCKORDERING, return -1);
     ec_nz(LOCKFILE, return -1);
 
-    while (fptr->readers || fptr->writers) {
+    while (fptr->readers || fptr->writers)
+    {
         ec_nz(WAITGO, { return -1; });
     }
 
@@ -1053,7 +1008,10 @@ evictedFile *storeEviction(_Bool ignoreLocks, char *pathToAvoid, _Bool ignoreEmp
         curr = curr->next;
     }
     if (!errno && curr)
+    {
         storeDelete(curr->data, &tmpContent); // on failure, ret NULL && errno set
+        eok(store.nEviction++);
+    }
 
     // if no files were eligible for eviction, NULL is returned
     return tmpContent;
@@ -1090,6 +1048,22 @@ queue *storeCleaner(size_t sizeNeeded, char *pathToAvoid)
     // UNLOCKSTORE;
     eo(queueDestroy(toReturn); return NULL);
     return toReturn;
+}
+
+void printPath (void *arg) {
+    fnode *fptr = arg;
+    printf("%s\n", fptr->path);
+    return;
+}
+
+int storeStats()
+{
+    printf(
+        ANSI_COLOR_BLUE "Max #files reached: %ld\n" ANSI_COLOR_GREEN "Max size reached: %ld\n" ANSI_COLOR_MAGENTA "#evicted: %ld\n" ANSI_COLOR_YELLOW "Files currently in the storage:\n" ANSI_COLOR_RESET,
+        store.maxNfilesReached,
+        store.maxSizeReached,
+        store.nEviction);
+    queueCallback(store.files,printPath);
 }
 
 evictedFile *copyFnode(fnode *tmp, _Bool keepLockers)
@@ -1189,6 +1163,10 @@ int storeInit(size_t maxNfiles, size_t maxSize, size_t evictPolicy)
     store.currSize = 0;
     store.evictPolicy = evictPolicy;
 
+    store.nEviction = 0;
+    store.maxNfilesReached = 0;
+    store.maxSizeReached = 0;
+
     return 0;
 }
 
@@ -1214,7 +1192,7 @@ void printFD(void *arg)
 void printEvicted(void *arg)
 {
     evictedFile *c = arg;
-    printf(ANSI_COLOR_CYAN "EVCTD -- PATH: %s | CONTENT: %.*s\n" ANSI_COLOR_RESET, c->path, (int)c->size, c->content);
+    printf(ANSI_COLOR_MAGENTA "EVCTD -- PATH: %s | CONTENT: %.*s\n" ANSI_COLOR_RESET, c->path, (int)c->size, c->content);
     printf(" LOCKERS:\n");
     queueCallback(c->notifyLockers, printFD);
 

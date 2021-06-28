@@ -47,7 +47,10 @@
 
 #define NUM_LEN 10
 
-char *sockName = NULL;
+#define INT_LEN 7
+
+
+char *sockName = "";
 
 #define SZCHAR sizeof(char)
 

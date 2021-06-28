@@ -4,10 +4,15 @@
  */
 #define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
+
 #include <queue.h>
+#include <conn.h>
+#include <filesys.h>
+#include <queue.h>
+#include <logger.h>
+
 #include <string.h>
 #include <utils.h>
-#include <server.h>
 #include <errno.h>
 #include <math.h>
 #include <assert.h>
@@ -53,8 +58,8 @@ char *gen_random(char *s, const int len);
 void *fakeWorker(void *arg);
 
 // SCAFFOLDING
-#define NROUTINES 5
-#define ITERATIONS 1000
+#define NROUTINES 8
+#define ITERATIONS 550
 #define MSGLEN 15
 #define NWORKERS 20
 
@@ -72,7 +77,7 @@ int main(void)
     initClients(fakeClients);
 
     LoggerCreate("log.txt");
-    storeInit(100, 100, 1);
+    storeInit(100, 1000, 1);
 
     // PseudoWorker
     pthread_t workers[NWORKERS];
@@ -87,6 +92,7 @@ int main(void)
     }
 
     // free stuff
+    storeStats();
     storeDestroy();
     freeArr((void **)paths, NFILES, NULL);
     freeArr((void **)fakeClients, NCLIENTS, NULL);
@@ -118,6 +124,7 @@ void *fakeWorker(void *arg)
         switch (routine)
         {
         case 0: //append
+        case 5:
             LoggerLog("BEGIN-rt0", strlen("BEGIN-rt0"));
             log(openFile(f, 0, 0, c, NULL), t);
             log(appendToFile(f, gen_random(msg, MSGLEN), MSGLEN, c, &list, 0), t);
@@ -150,6 +157,8 @@ void *fakeWorker(void *arg)
             LoggerLog("END-rt2", strlen("END-rt2"));
             break;
         case 3: //write
+        case 6:
+        case 7:
             LoggerLog("BEGIN-rt3", strlen("BEGIN-rt3"));
             log(openFile(f, 1, 1, c, NULL), t);
             log(appendToFile(f, gen_random(msg, MSGLEN), MSGLEN, c, &list, 1), t);

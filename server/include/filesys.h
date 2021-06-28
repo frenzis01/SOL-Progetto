@@ -3,13 +3,19 @@
 
 #include <icl_hash.h>
 #include <queue.h>
-#include <pthread.h>
+#include <logger.h>
 
-typedef struct {
-    int fd;
-    // queue *opened;
-    // queue *locked; 
-} Client;
+#include <pthread.h>
+#include <utils.h>
+#include <conn.h>
+
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include <limits.h>
+
 
 typedef struct nodo {
     char *path; // file metadata
@@ -50,9 +56,17 @@ typedef struct {
     size_t maxSize;
 
     size_t evictPolicy; // 0 FIFO | 1 LRU
+
+    //stats
+    size_t nEviction;
+    size_t maxSizeReached;
+    size_t maxNfilesReached;
 } FileSystem;
 
+
 FileSystem store;
+
+#define PATH_LENGTH 2048
 
 // filesys
 int openFile(char *path, int createF, int lockF, Client *client, evictedFile **evicted); /*fnode **toRet,*/
@@ -81,6 +95,10 @@ int storeDestroy();
 void printEvicted(void *arg);
 
 void printFnode(void *arg);
+
+void printPath (void *arg);
+
+int storeStats();
 
 void freeFile(void *arg);
 

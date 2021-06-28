@@ -1,11 +1,5 @@
 #include <conn.h>
 
-#include <server.h>
-#include <signal.h>
-#include <protocol.h>
-
-
-
 void setFlags(Request *req, int flags);
 
 Request *getRequest(int fd, int *msg)
@@ -13,7 +7,7 @@ Request *getRequest(int fd, int *msg)
     errno = 0;
     Request *req;
     ec_z(req = malloc(sizeof(Request)), return NULL);
-    char op, oflags, nfiles, pathLen, appendLen, dirnameLen;
+    char op, oflags, nfiles, pathLen, appendLen, dirnameLen, fdBuf[INT_LEN];
     req->path = NULL;
     req->append = NULL;
     req->dirname = NULL;
@@ -28,12 +22,12 @@ Request *getRequest(int fd, int *msg)
     // sizeof(char) dovrebbe essere sempre 1, ma lasciamo sizeof(char)
     // NB: se la read fallisce, setta errno e lo gestirà il chiamante
     ec_n(readn(fd, &op, SZCHAR), SZCHAR, free(req); return NULL;); // should read 1 byte
-    if (op == 0) // client closed the connection
+    if (op == 0)                                                   // client closed the connection
     {
         *msg = 1;
         return NULL;
     }
-    
+
     ec_n(readn(fd, &oflags, SZCHAR), SZCHAR, free(req); return NULL;);
     ec_n(readn(fd, &nfiles, SZCHAR), SZCHAR, free(req); return NULL;);
     ec_n(readn(fd, &pathLen, SZCHAR), SZCHAR, free(req); return NULL;);
@@ -62,7 +56,8 @@ Request *getRequest(int fd, int *msg)
     req->dirnameLen = dirnameLen;
 
     // Only the thread dispatcher is allowed to add clients
-    ec_z(req->client = icl_hash_find(clients, fd), freeRequest(req); errno = EBADF; return NULL;);
+    ec_neg1(snprintf(fdBuf, INT_LEN, "%06d", fd), /* handle error */);
+    ec_z(req->client = icl_hash_find(clients, fdBuf), freeRequest(req); errno = EBADF; return NULL;);
 
     return req;
 }
@@ -118,13 +113,26 @@ void freeRequest(void *arg)
 Client *addClient(int fd)
 {
     Client *newClient = NULL;
+    char fdBuf[INT_LEN], *fdTmp;
     ec_nz(newClient = malloc(sizeof(Client)), return NULL;);
     newClient->fd = fd;
-    ec_nz(icl_hash_find(clients, fd), free(newClient); errno = EADDRINUSE; return NULL);
-    icl_hash_insert(clients, fd, newClient);
+    ec_neg1(snprintf(fdBuf, INT_LEN, "%06d", fd), /* handle error */);
+    ec_nz(icl_hash_find(clients, fdBuf), free(newClient); errno = EADDRINUSE; return NULL);
+    ec_z(fdTmp = strndup(fdBuf, INT_LEN), /* handle error */);
+    icl_hash_insert(clients, fdTmp, newClient);
     return newClient;
 }
 
-int removeClient (int fd) {
-    return icl_hash_delete(clients,fd,NULL,NULL);
+int removeClient(int fd)
+{
+    char fdBuf[INT_LEN];
+    ec_neg1(snprintf(fdBuf, INT_LEN, "%06d", fd), /* handle error */);
+    return icl_hash_delete(clients, fdBuf, NULL, NULL);
+}
+
+_Bool NoMoreClients()
+{
+    if (clients->nentries)
+        return 0;
+    return 1;
 }

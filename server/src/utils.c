@@ -134,10 +134,6 @@ int conf_sizet(FILE *file, char const *desired_name, size_t *ret) {
     return ret_val;
 }
 
-sigset_t initSigMask() {
-    sigset_t set;
-}
-
 /**
  * Find maximum between two or more integer variables
  * @param args Total number of integers

@@ -1,10 +1,11 @@
 #ifndef LOGGER_H
 #define LOGGER_H
 
+#include <utils.h>
+
 #include <stddef.h>
 #include <stdio.h>
 #include <pthread.h>
-#include <utils.h>
 #include <time.h>
 #include <limits.h>
 

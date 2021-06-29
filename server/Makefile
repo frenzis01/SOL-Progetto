@@ -12,10 +12,10 @@ LIBS_SERVER_SO = lib/libqueue.so lib/libutils.so lib/liblogger.so lib/libfilesys
 .PHONY: clean
 .SUFFIXES: .c .h
 
-bin/test_filesys: test/test_filesys.c lib/libfilesys.so lib/libqueue.so lib/libconn.so lib/liblogger.so
+bin/test_filesys: test/test_filesys.c lib/libfilesys.so lib/libqueue.so lib/libconn.so lib/liblogger.so lib/libicl_hash.so
 	#filesys
 	rm -f log.txt
-	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lfilesys -lqueue -lconn -llogger -lpthread
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lfilesys -lqueue -lconn -llogger -lpthread -licl_hash
 
 bin/mt_filesys: test/mt_filesys.c lib/libfilesys.so lib/libqueue.so lib/libconn.so lib/liblogger.so
 	#filesys multithread

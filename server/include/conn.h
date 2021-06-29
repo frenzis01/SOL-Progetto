@@ -4,11 +4,11 @@
 
 #define _POSIX_C_SOURCE 200809L
 
-#include <signal.h>
 #include <icl_hash.h>
 #include <utils.h>
 #include <protocol.h>
 
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,6 +18,7 @@ typedef struct {
     // queue *opened;
     // queue *locked; 
 } Client;
+
 typedef struct {
     int op;         // mandatory
     char *path;     // mandatory
@@ -44,7 +45,7 @@ void freeRequest(void *arg);
 
 Client *addClient(int fd);
 
-int removeClient (int fd);
+// int removeClient(int fd, queue **notifyLockers);
 
 _Bool NoMoreClients();
 

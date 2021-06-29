@@ -58,7 +58,7 @@ char *gen_random(char *s, const int len);
 void *fakeWorker(void *arg);
 
 // SCAFFOLDING
-#define NROUTINES 8
+#define NROUTINES 9
 #define ITERATIONS 550
 #define MSGLEN 15
 #define NWORKERS 20
@@ -96,11 +96,7 @@ int main(void)
     storeDestroy();
     freeArr((void **)paths, NFILES, NULL);
     freeArr((void **)fakeClients, NCLIENTS, NULL);
-    LoggerFlush();
     LoggerDelete();
-
-    MSG_PERROR("messaggio");
-    perror(ONLY_MSG_ERR);
     return 0;
 }
 
@@ -180,6 +176,22 @@ void *fakeWorker(void *arg)
             }
             LoggerLog("END-rt4", strlen("END-rt4"));
             break;
+        case 8: //removeClient
+            LoggerLog("BEGIN-rt5", strlen("BEGIN-rt5"));
+            queue *notify = NULL;
+            notify = storeRemoveClient(c);
+            strerror_r(errno, buf, 200);
+            if (!notify)
+            {
+                perror(ANSI_COLOR_CYAN "INTERNAL FATAL ERROR" ANSI_COLOR_RESET);
+                exit(EXIT_FAILURE);
+            }
+            res = 0;
+            sprintf(ret, "%d__%d__storeRemoveClient__%s", t, res, buf);
+            puts(ret);
+            LoggerLog(ret, strlen(ret));
+            queueDestroy(notify);
+            LoggerLog("END-rt5", strlen("END-rt5"));
         default:
             break;
         }

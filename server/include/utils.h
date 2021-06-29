@@ -1,6 +1,9 @@
 #ifndef UTILS_H
 #define UTILS_H
 
+#define _POSIX_C_SOURCE 200809L
+
+
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -96,6 +99,9 @@ readn(int fd, void *ptr, size_t n);
 
 ssize_t /* Write "n" bytes to a descriptor */
 writen(int fd, void *ptr, size_t n);
+
+void freeNothing(void *arg) { return; };
+
 
 char *readLineFromFILEn(char *inputfer, unsigned int len, FILE *fp);
 

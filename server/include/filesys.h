@@ -90,6 +90,9 @@ int storeInit(size_t maxNfiles, size_t maxSize, size_t evictPolicy);
 
 int storeDestroy();
 
+queue *storeRemoveClient(Client *client);
+
+
 // filesys struct - prints and frees 
 
 void printEvicted(void *arg);

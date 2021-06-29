@@ -3,6 +3,7 @@
 #include <queue.h>
 #include <conn.h>
 #include <filesys.h>
+#include <icl_hash.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -11,16 +12,12 @@
 #include <math.h> // calculate size_t->char[] len
 #include <assert.h>
 
-#define ANSI_COLOR_CYAN    "\x1b[36m"
-#define ANSI_COLOR_RESET   "\x1b[0m"
+#define ANSI_COLOR_CYAN "\x1b[36m"
+#define ANSI_COLOR_RESET "\x1b[0m"
 #define MSG_PERROR(s) perror(ANSI_COLOR_CYAN s ANSI_COLOR_RESET);
 #define ONLY_MSG_ERR ANSI_COLOR_CYAN "INTERNAL" ANSI_COLOR_RESET
 
-
-// READ CONFIG FILE
-// #define TEST_LOG
 #define TEST_FILESYS
-#define LOG_TEST 16384
 
 void initPaths(char **paths);
 void initClients(Client **clients);
@@ -105,7 +102,7 @@ int main(void)
     queueDestroy(readFiles);
 
     // REMOVEFILE
-    
+
     assert(!removeFile(paths[0], clients[0], &evicted[0]));
     assert(!errno);
     // printEvicted(evicted[0]);
@@ -164,9 +161,9 @@ int main(void)
     queueCallback(store.files, printFnode); //LRU ok!
 
     puts("debug");
-    assert(0 == lockFile(paths[5],clients[1]));
-    assert(1 == lockFile(paths[5],clients[2]));
-    assert(1 == lockFile(paths[5],clients[3]));
+    assert(0 == lockFile(paths[5], clients[1]));
+    assert(1 == lockFile(paths[5], clients[2]));
+    assert(1 == lockFile(paths[5], clients[3]));
 
     // only five file files are in the storage
     // strlen(MSG) == 14
@@ -176,6 +173,20 @@ int main(void)
     queueCallback(evictedfiles, printEvicted); //
     queueDestroy(evictedfiles);
 
+    // let's try to evict lockers
+    assert(0 == lockFile(paths[6], clients[1]));
+    assert(1 == lockFile(paths[6], clients[2]));
+    assert(1 == lockFile(paths[6], clients[3]));
+
+    assert(clients[2]->fd == unlockFile(paths[6], clients[1]));
+    // clietns[2] should have acquired the lock
+    assert((clients[2])->fd == ((fnode *)(((data *)(icl_hash_find(store.fdict, paths[6])))->data))->lockedBy);
+    queue *notify = storeRemoveClient(clients[2]);
+    assert(clients[3] == queueFind(notify,clients[3],NULL));
+    assert((clients[3])->fd == ((fnode *)(((data *)(icl_hash_find(store.fdict, paths[6])))->data))->lockedBy);
+    queueDestroy(notify);
+
+    storeStats();
     storeDestroy();
 
     freeArr((void **)paths, NFILES, NULL);
@@ -184,35 +195,6 @@ int main(void)
     // freeArr((void **)evicted, NFILES, freeEvicted);
 
 #endif
-
-// TEST LOG
-#ifdef TEST_LOG
-    errno = 0;
-    LoggerCreate("log.txt");
-    perror("OK?");
-    LoggerLog("FIRST LINE ", strlen("FIRST LINE "));
-    perror("OK?");
-    LoggerFlush();
-    perror("OK?");
-
-
-    for (size_t i = 1; i < LOG_TEST; i++)
-    {
-
-        char buf[2000] = "Some stuff ";
-        char nbuf[2000];
-        sprintf(nbuf, "%ld", i);
-        strcat(buf, nbuf);
-
-        LoggerLog(buf, strlen(buf));
-    }
-    LoggerFlush();
-
-    LoggerDelete();
-#endif
-    printf("FINE ERRNO=%d\n", errno);
-    MSG_PERROR("messaggio");
-    perror(ONLY_MSG_ERR);
     return 0;
 }
 

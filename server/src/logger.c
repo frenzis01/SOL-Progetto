@@ -70,6 +70,8 @@ void LoggerDelete()
     errno = 0;
     ec_nz_l(LOCK, return );
 
+    SimpleFlush();
+
     ec_nz_l(fclose(logger->file), return );
     free(logger->buf);
     free(logger);

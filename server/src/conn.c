@@ -80,8 +80,12 @@ void setFlags(Request *req, int flags)
     default:
         break;
     }
+    return;
 }
-
+/**
+ * Masks SIGINT,SIGQUIT and SIGHUP
+ * @returns set, dies on error
+ */
 sigset_t initSigMask()
 {
     sigset_t set;
@@ -90,7 +94,7 @@ sigset_t initSigMask()
     ec(sigaddset(&set, SIGINT), -1, exit(EXIT_FAILURE));  /* it will be handled with sigwait only */
     ec(sigaddset(&set, SIGQUIT), -1, exit(EXIT_FAILURE)); /* it will be handled with sigwait only */
     ec(sigaddset(&set, SIGHUP), -1, exit(EXIT_FAILURE));  /* it will be handled with sigwait only */
-    ec(pthread_sigmask(SIG_SETMASK, &set, NULL), -1, exit(EXIT_FAILURE));
+    ec(pthread_sigmask(SIG_BLOCK, &set, NULL), -1, exit(EXIT_FAILURE));
     return set;
 }
 
@@ -104,6 +108,7 @@ void freeRequest(void *arg)
     free(req->append);
     free(req->dirname);
     free(req);
+    return;
 }
 
 /**
@@ -116,19 +121,13 @@ Client *addClient(int fd)
     char fdBuf[INT_LEN], *fdTmp;
     ec_nz(newClient = malloc(sizeof(Client)), return NULL;);
     newClient->fd = fd;
-    ec_neg1(snprintf(fdBuf, INT_LEN, "%06d", fd), /* handle error */);
+    ec_neg1(snprintf(fdBuf, INT_LEN, "%06d", fd), return NULL);
     ec_nz(icl_hash_find(clients, fdBuf), free(newClient); errno = EADDRINUSE; return NULL);
-    ec_z(fdTmp = strndup(fdBuf, INT_LEN), /* handle error */);
+    ec_z(fdTmp = strndup(fdBuf, INT_LEN), return NULL);
     icl_hash_insert(clients, fdTmp, newClient);
     return newClient;
 }
 
-int removeClient(int fd)
-{
-    char fdBuf[INT_LEN];
-    ec_neg1(snprintf(fdBuf, INT_LEN, "%06d", fd), /* handle error */);
-    return icl_hash_delete(clients, fdBuf, NULL, NULL);
-}
 
 _Bool NoMoreClients()
 {

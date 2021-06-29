@@ -70,7 +70,6 @@ int cmpFd(void *a, void *b);
 int cmpFile(void *a, void *b);
 int cmpPathChar(void *a, void *b);
 
-void freeNothing(void *arg) { return; };
 void freeFile_LOCKERS(void *arg);
 void printFD(void *arg);
 
@@ -762,12 +761,13 @@ int removeFile(char *path, Client *client, evictedFile **evicted)
 }
 
 /**
- * 
- * @description
+ * Scans the whole storage to remove a client from openBy e lockedBy/lockersPending
+ * @returns NULL on error, on success -> list of clients who successfully acquired O_LOCK after the removal of
+ *  the previous owner. Might be empty.
  */
 queue *storeRemoveClient(Client *client)
 {
-    queue *notifyLockers = queueCreate(free, cmpFd);
+    queue *notifyLockers = queueCreate(freeNothing, cmpFd);
     ec_nz_f(LOCKSTORE, return NULL);
 
     data *curr = store.files->head;
@@ -1058,12 +1058,14 @@ void printPath (void *arg) {
 
 int storeStats()
 {
+    puts(ANSI_COLOR_CYAN "-----STORE STATISTICS:" ANSI_COLOR_RESET);
     printf(
         ANSI_COLOR_BLUE "Max #files reached: %ld\n" ANSI_COLOR_GREEN "Max size reached: %ld\n" ANSI_COLOR_MAGENTA "#evicted: %ld\n" ANSI_COLOR_YELLOW "Files currently in the storage:\n" ANSI_COLOR_RESET,
         store.maxNfilesReached,
         store.maxSizeReached,
         store.nEviction);
     queueCallback(store.files,printPath);
+    puts(ANSI_COLOR_CYAN "-----END" ANSI_COLOR_RESET);
 }
 
 evictedFile *copyFnode(fnode *tmp, _Bool keepLockers)
@@ -1091,6 +1093,8 @@ evictedFile *copyFnode(fnode *tmp, _Bool keepLockers)
  */
 void freeFile_LOCKERS(void *arg)
 {
+    if (!arg) return;
+    
     errno = 0;
     fnode *fptr = (fnode *)arg;
     // Assumiamo che il caller abbia sistemato mutex e cond
@@ -1112,6 +1116,7 @@ void freeFile_LOCKERS(void *arg)
  */
 void freeFile(void *arg)
 {
+    if (!arg) return;
     errno = 0;
     fnode *fptr = (fnode *)arg;
     // Assumiamo che il caller abbia sistemato mutex e cond
@@ -1132,6 +1137,7 @@ void freeFile(void *arg)
 
 void freeEvicted(void *p)
 {
+    if (!p) return;
     evictedFile *arg = p;
     free(arg->content);
     free(arg->path);

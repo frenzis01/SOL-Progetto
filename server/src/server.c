@@ -1,16 +1,6 @@
 #include <server.h>
 
 #pragma region
-// output colors
-#define ANSI_COLOR_RED "\x1b[31m"
-#define ANSI_COLOR_GREEN "\x1b[32m"
-#define ANSI_COLOR_YELLOW "\x1b[33m"
-#define ANSI_COLOR_BLUE "\x1b[34m"
-#define ANSI_COLOR_MAGENTA "\x1b[35m"
-#define ANSI_COLOR_CYAN "\x1b[36m"
-#define ANSI_COLOR_RESET "\x1b[0m"
-#pragma endregion
-
 #define eo(c)                                                      \
     if (errno != 0)                                                \
     {                                                              \
@@ -96,16 +86,16 @@ volatile sig_atomic_t myShutdown = 0;
 #define LOGBUF_LEN 400
 #define ERRNOBUF_LEN 200
 
+#pragma endregion
+
 void removeSocket()
 {
     unlink(sockName);
-    icl_hash_destroy(clients, NULL, NULL);
-    storeDestroy();
+    free(sockName);
 }
 
 int main(void)
 {
-
 
     // char cwd[PATH_MAX];
     // if (getcwd(cwd, sizeof(cwd)) != NULL)
@@ -119,19 +109,24 @@ int main(void)
     // }
 
     // Signal handler setup
+    myShutdown = 0;
+    ec_neg1(pipe(sigPipe), exit(EXIT_FAILURE));
+    ec_neg1(pipe(mwPipe), exit(EXIT_FAILURE));
+    ec_z(requests = queueCreate(freeNothing,NULL), exit(EXIT_FAILURE));
+
     sigset_t mask = initSigMask();
-    ec_nz(pthread_sigmask(SIG_SETMASK, &mask, NULL), exit(EXIT_FAILURE));
-    pthread_t sigHandler;
-    ec_neg1(pthread_create(&sigHandler, NULL, signalHandler, NULL), exit(EXIT_FAILURE));
+    // ec_nz(pthread_sigmask(SIG_SETMASK, &mask, NULL), exit(EXIT_FAILURE));
+    pthread_t sigHandThread;
+    ec_neg1(pthread_create(&sigHandThread, NULL, signalHandler, &mask), exit(EXIT_FAILURE));
 
     // Server initialization
     ServerData meta;
     ec_neg1(readConfig(CONFIG_PATH, &meta), exit(EXIT_FAILURE));
     ec_neg1(storeInit(meta.nfiles, meta.capacity, meta.evictPolicy), exit(EXIT_FAILURE));
-    ec_z(clients = icl_hash_create(H_BUCKETS,NULL,NULL), exit(EXIT_FAILURE));
+    ec_z(clients = icl_hash_create(H_BUCKETS, NULL, NULL), exit(EXIT_FAILURE));
     size_t poolSize = meta.workers;
     sockName = meta.sockname; // declared in conn.h
-    
+
     atexit(removeSocket); // we do not care if they were uninitialized
 
     eo_af(LoggerCreate(LOG_PATH), storeDestroy(); exit(EXIT_FAILURE););
@@ -143,81 +138,100 @@ int main(void)
     // Create workers first, so there is no (less) risk that requests received (and 'signaled'!) before
     // the workers started waiting are never taken in charge
     workerArgs args[1];
-    args->sigHandler = &sigHandler;
+    args->sigHandler = &sigHandThread;
     for (size_t i = 0; i < poolSize; i++) // workers init
     {
         args->tid = i;
-        ec_neg1(pthread_create(&workers[i], NULL, worker, (void *)(args)), /* handle error */);
+        ec_neg1(pthread_create(&workers[i], NULL, worker, (void *)(args)), exit(EXIT_FAILURE));
     }
 
     ec_neg1(pthread_create(&dispThread, NULL, dispatcher, NULL), storeDestroy(); exit(EXIT_FAILURE));
 
+    // char buf[1] = {'a'};
+    // write(SIGNAL_WRITE,buf,1);
+    // write(WORKER_WRITE,buf,1);
+    // write(WORKER_WRITE,buf,1);
+
     // cleanup
-    ec_neg1(pthread_join(sigHandler, NULL), /* handle error */);
-    ec_neg1(pthread_join(dispThread, NULL), /* handle error */);
+    ec_neg1(pthread_join(dispThread, NULL), exit(EXIT_FAILURE));
+    puts("Dispatcher joined");
 
     // send termination msg (NULL) to threads
     for (size_t i = 0; i < poolSize; i++)
     {
         PUSH_REQUEST(NULL);
     }
+    puts("Termination msg sent");
 
     for (size_t i = 0; i < poolSize; i++)
     {
-        ec_neg1(pthread_join(workers[i], NULL), /* handle error */);
+        ec_neg1(pthread_join(workers[i], NULL), exit(EXIT_FAILURE));
     }
+    puts("All workers joined");
 
-    close(SIGNAL_WRITE);
-    close(SIGNAL_READ);
+    ec_neg1(pthread_join(sigHandThread, NULL), exit(EXIT_FAILURE));
+    puts("Sighandler joined");
+
+    // close(SIGNAL_WRITE);
+    // close(SIGNAL_READ);
     close(WORKER_WRITE);
     close(MANAGER_READ);
+
+
+    icl_hash_destroy(clients, NULL, NULL);
+    storeDestroy();
+    queueDestroy(requests);
+    
+    eo_af(LoggerLog(CLEANEXIT_MSG, strlen(STARTUP_MSG)), storeDestroy(); exit(EXIT_FAILURE););
+    LoggerDelete();
 
     return 0; // storeDestroy() and unlink are in 'atexit'
 }
 
 void *dispatcher(void *arg)
 {
+    puts(ANSI_COLOR_YELLOW "Dispatcher startup" ANSI_COLOR_RESET);
     // SERVER - GESTIONE SOCKET
 
     // fd_c == fd_client
-    int fd_skt, fd_c, fd_hwm = 0, fd;
+    int fd_skt, fd_c, fd;
     char
         toLog[LOGBUF_LEN],
         buf[BUF], //read buffer
         fdBuf[INT_LEN],
         *fdTmp;
     fd_set set, read_set;
-    ssize_t nread;
 
-    struct sockaddr_un sa;
-    strncpy(sa.sun_path, sockName, UNIX_PATH_MAX);
-    sa.sun_family = AF_UNIX;
+    struct sockaddr_un s_addr;
+    memset(&s_addr, '0', sizeof(s_addr));
+    strncpy(s_addr.sun_path, sockName, UNIX_PATH_MAX);
+    s_addr.sun_family = AF_UNIX;
 
-    // EXIT_FAILURE o return -1 ???
-    ec_neg1(fd_skt = socket(AF_UNIX, SOCK_STREAM, 0), {});
-    ec_neg1(bind(fd_skt, (struct sockaddr *)&sa, sizeof(sa)), {});
-    ec_neg1(listen(fd_skt, SOMAXCONN), {});
+    ec_neg1(fd_skt = socket(AF_UNIX, SOCK_STREAM, 0), /* handle error */);
+    ec_neg1(bind(fd_skt, (struct sockaddr *)&s_addr, sizeof(s_addr)), /* handle error */);
+    ec_neg1(listen(fd_skt, SOMAXCONN), /* handle error */);
 
     FD_ZERO(&set);
+    FD_ZERO(&read_set);
+
     FD_SET(fd_skt, &set);
-    FD_SET(MANAGER_READ, &set); // aggiungiamo la pipe fra M e W
-    FD_SET(SIGNAL_READ, &set);  // aggiungiamo la pipe fra M e W
+    FD_SET(MANAGER_READ, &set);
+    FD_SET(SIGNAL_READ, &set);
 
-    int fdhwm = max(3, fd_skt, MANAGER_READ, SIGNAL_READ);
+    int fd_hwm = max(3, fd_skt, MANAGER_READ, SIGNAL_READ);
 
-    int sel_ret;
     Client *requestor = NULL;
+    // struct timeval tv = {1,0};
 
-    // pthread_mutex_lock(&mutex);
     while (myShutdown != HARSH_QUIT)
     {
-        // pthread_mutex_unlock(&mutex);
         read_set = set;
-        ec_neg1((sel_ret = select(fd_hwm + 1, &read_set, NULL, NULL, NULL /*&timeout*/)), /* handle error */);
+        ec_neg1(select(fd_hwm + 1, &read_set, NULL, NULL, NULL), exit(EXIT_FAILURE));
         /* if (sel_ret == 0)
         {
             continue; // skippi alla prossima iterazione del ciclo
         } */
+        puts("SELECT WOKE UP");
         for (fd = 0; fd <= fd_hwm /*&& !sig_flag*/; fd++)
         {
             if (FD_ISSET(fd, &read_set))
@@ -225,7 +239,7 @@ void *dispatcher(void *arg)
                 if (fd == fd_skt) // new connection
                 {
                     ec_neg1(fd_c = accept(fd_skt, NULL, 0), {});
-                    if (myShutdown) // If exiting, i don't accept new clients
+                    if (myShutdown) // If exiting, don't accept new clients
                     {
                         ec_neg1(close(fd_c), exit(EXIT_FAILURE));
                     }
@@ -248,6 +262,8 @@ void *dispatcher(void *arg)
                     // Se ci fossero più di 10 fd da leggere non è un problema,
                     // Rimarranno nella pipe e verranno letti alla prossima iterazione
 
+                    puts("dispatcher - WORKER FD RECEIVED");
+
                     int i = 0, *fdFromWorker = calloc(10, sizeof(int));
                     ec_neg1(readn(MANAGER_READ, fdFromWorker, 10 * sizeof(int)), /* handle error */);
                     while (fdFromWorker[i] != 0)
@@ -255,13 +271,13 @@ void *dispatcher(void *arg)
                         if (fdFromWorker[i] < 0)
                         { // a client left
                             fdFromWorker[i] *= -1;
-                            ec_neg1(removeClient(fdFromWorker[i]), /* handle error */);
+                            // ec_neg1(removeClient(fdFromWorker[i]), /* handle error */);
                             ec_neg1(snprintf(toLog, LOGBUF_LEN, "CLIENT LEFT: %d", fdFromWorker[i]), /* handle error */);
                             eo_af(LoggerLog(toLog, strlen(toLog)), /* handle error */);
                             if (NoMoreClients() && myShutdown == HUP_QUIT)
                             {
                                 // done reading
-                                goto dispatcher_exit;
+                                goto dispatcher_cleanup;
                             }
                         }
                         else
@@ -275,9 +291,9 @@ void *dispatcher(void *arg)
                 }
                 else if (fd == SIGNAL_READ) // Wake from signal handler
                 {
-                    puts("SIGNAL RECEIVED");
-                    if (myShutdown == HARSH_QUIT)
-                        break;
+                    puts("dispatcher - SIGNAL RECEIVED");
+                    if (myShutdown == HARSH_QUIT || (myShutdown == HUP_QUIT && NoMoreClients()))
+                        goto dispatcher_cleanup;
                 }
                 else // New request
                 {
@@ -292,32 +308,38 @@ void *dispatcher(void *arg)
             }
         }
     }
-dispatcher_exit:
+dispatcher_cleanup:
+
     return NULL;
 }
 
 void *signalHandler(void *args)
 {
+    puts(ANSI_COLOR_BLUE "Signal Handler startup" ANSI_COLOR_RESET);
     sigset_t *set = args;
-    int r, sig;
     while (1)
     {
+        int r, sig;
         r = sigwait(set, &sig);
         ec_nz(r, return NULL; /*exit(EXIT_FAILURE)*/);
-    }
-    switch (sig)
-    {
-    case SIGINT:
-    case SIGQUIT:
-        myShutdown = HARSH_QUIT;
-        close(SIGNAL_WRITE);
-        break;
-    case SIGHUP:
-        myShutdown = HUP_QUIT;
-        close(SIGNAL_WRITE);
-        break;
-    default:
-        break;
+
+        switch (sig)
+        {
+        case SIGINT:
+        case SIGQUIT:
+            puts(ANSI_COLOR_BLUE "SIGNAL RECEIVED" ANSI_COLOR_RESET);
+            myShutdown = HARSH_QUIT;
+            // write(SIGNAL_WRITE, "1", 1);
+            close(SIGNAL_WRITE);
+            return NULL;
+        case SIGHUP:
+            puts(ANSI_COLOR_CYAN "SIGNAL RECEIVED" ANSI_COLOR_RESET);
+            myShutdown = HUP_QUIT;
+            // write(SIGNAL_WRITE, "1", 1);
+            close(SIGNAL_WRITE);
+            return NULL;
+        default:;
+        }
     }
     return NULL;
 }
@@ -335,6 +357,8 @@ void *signalHandler(void *args)
  */
 void *worker(void *args)
 {
+    puts(ANSI_COLOR_GREEN "Worker startup" ANSI_COLOR_RESET);
+
     size_t myTid = ((workerArgs *)args)->tid;
     pthread_t sigHandlerPtr = *(((workerArgs *)args)->sigHandler);
 
@@ -360,6 +384,7 @@ void *worker(void *args)
         ec_nz(pthread_cond_wait(&condReq, &lockReq), {}); // wait for requests
         eo_af(requestor = queueDequeue(requests), WK_DIE_ON_ERR);
         ec_nz(pthread_mutex_unlock(&lockReq), {});
+        if(!requestor) goto worker_cleanup;
         fd = requestor->fd;
 
         // Parsing Nightmare
@@ -623,4 +648,22 @@ int readConfig(char *configPath, ServerData *new)
     fclose(conf);
 
     return 0;
+}
+
+
+/**
+ * Put here and not in conn.h to avoid circular dependencies with filesys
+ */
+int removeClient(int fd, queue **notifyLockers)
+{
+    // close connection
+    char fdBuf[INT_LEN];
+    ec_neg1(snprintf(fdBuf, INT_LEN, "%06d", fd), return -1);
+    ec_neg1(close(fd), return -1);
+    // remove from storage
+    Client *toRemove = icl_hash_find(clients,fdBuf);
+    ec_z(toRemove,return -1);
+    ec_z(*notifyLockers = storeRemoveClient(toRemove),return -1);
+
+    return icl_hash_delete(clients, fdBuf, NULL, NULL);
 }

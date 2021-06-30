@@ -100,7 +100,7 @@ readn(int fd, void *ptr, size_t n);
 ssize_t /* Write "n" bytes to a descriptor */
 writen(int fd, void *ptr, size_t n);
 
-void freeNothing(void *arg) { return; };
+void freeNothing(void *arg) { return; }
 
 
 char *readLineFromFILEn(char *inputfer, unsigned int len, FILE *fp);
@@ -116,5 +116,7 @@ int conf_sizet(FILE *file, char const *desired_name, size_t *ret);
 // sigset_t initSigMask();
 
 int max(int args, ...);
+
+int isInteger(const char* s, int* n);
 
 #endif

@@ -160,3 +160,28 @@ int max(int args, ...){
 
     return max;
 }
+
+/**
+ * Checks if 's' is an integer and stores the corresponding value in 'n'
+ * @param n where the result will be stored
+ * @returns 1 success, 0 's' not an integer
+ */
+int isInteger(const char* s, int* n){
+    char *e = NULL;
+    errno = 0;
+    long val = strtol(s, &e, 10);
+
+    if (errno == ERANGE || val > INT_MAX || val < INT_MIN){
+        // overflow/underflow
+        return 0;
+    }
+
+    if (errno==0 && e != NULL && e != s){
+        *n = (int) val;
+        // è un numero valido
+        return 1;
+    }
+
+    // non è un numero
+    return 0;
+}

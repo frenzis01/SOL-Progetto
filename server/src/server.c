@@ -71,7 +71,6 @@ queue *requests;
 
 // THREAD DISPATCHER
 #define BUF 8192
-#define UNIX_PATH_MAX 108
 
 volatile sig_atomic_t myShutdown = 0;
 
@@ -88,6 +87,8 @@ volatile sig_atomic_t myShutdown = 0;
 #define ERRNOBUF_LEN 200
 
 #pragma endregion
+
+char *sockName = "";
 
 void removeSocket()
 {
@@ -146,7 +147,7 @@ int main(void)
         ec_neg1(pthread_create(&workers[i], NULL, worker, (void *)(args)), exit(EXIT_FAILURE));
     }
 
-    ec_neg1(pthread_create(&dispThread, NULL, dispatcher, (void*)(&sigHandThread)), storeDestroy(); exit(EXIT_FAILURE));
+    ec_neg1(pthread_create(&dispThread, NULL, dispatcher, (void *)(&sigHandThread)), storeDestroy(); exit(EXIT_FAILURE));
 
     // char buf[1] = {'a'};
     // write(SIGNAL_WRITE,buf,1);
@@ -189,24 +190,24 @@ int main(void)
 }
 
 #define DS_DEATH_MSG "DISPATCHER DIED"
-#define DS_DIE_ON_ERR                                      \
-    perror(ANSI_COLOR_RED "DISPATCHER DIED" ANSI_COLOR_RESET); \
-    LoggerLog(DS_DEATH_MSG, strlen(DS_DEATH_MSG));                 \
+#define DS_DIE_ON_ERR                                               \
+    perror(ANSI_COLOR_RED "DISPATCHER DIED" ANSI_COLOR_RESET);      \
+    LoggerLog(DS_DEATH_MSG, strlen(DS_DEATH_MSG));                  \
     ec_nz(pthread_kill(sigHandlerRef, SIGINT), exit(EXIT_FAILURE)); \
     goto dispatcher_cleanup;
 
 void *dispatcher(void *arg)
 {
     puts(ANSI_COLOR_YELLOW "Dispatcher startup" ANSI_COLOR_RESET);
-    
-    pthread_t sigHandlerRef = *((pthread_t*)arg);
+
+    pthread_t sigHandlerRef = *((pthread_t *)arg);
     // fd_c == fd_client
     int fd_skt, fd_c, fd;
     char
         toLog[LOGBUF_LEN],
         // buf[BUF], //read buffer
         fdBuf[INT_LEN];
-        // *fdTmp;
+    // *fdTmp;
     fd_set set, read_set;
 
     struct sockaddr_un s_addr;
@@ -255,8 +256,15 @@ void *dispatcher(void *arg)
                     {
                         puts("Dispatcher - New connection accepted");
                         // activeConnections++;
-                        ec_z(addClient(fd_c), DS_DIE_ON_ERR);
-                        ec_neg1(snprintf(toLog, LOGBUF_LEN, "CLIENT NEW: %d", fd_c), DS_DIE_ON_ERR);
+                        // ec_z(addClient(fd_c),DS_DIE_ON_ERR);
+                        Client *tmp = addClient(fd_c);
+                        ec_z(tmp, DS_DIE_ON_ERR);
+                        printf("\n--------CLIENT: %d\n", tmp->fd);
+                        puts("DEBUG");
+                        if (snprintf(toLog, LOGBUF_LEN, "CLIENT NEW: %d", fd_c) < 0)
+                        {
+                            DS_DIE_ON_ERR
+                        };
                         eo_af(LoggerLog(toLog, strlen(toLog)), DS_DIE_ON_ERR);
                         FD_SET(fd_c, &set);
                         if (fd_c > fd_hwm)
@@ -271,19 +279,19 @@ void *dispatcher(void *arg)
                     // Se ci fossero più di 10 fd da leggere non è un problema,
                     // Rimarranno nella pipe e verranno letti alla prossima iterazione
 
-                    int i = 0, *fdFromWorker = calloc(10, sizeof(int));
-                    ec_neg1(readn(MANAGER_READ, fdFromWorker, 10 * sizeof(int)), DS_DIE_ON_ERR);
-                    while (fdFromWorker[i] != 0)
-                    {
-                        if (fdFromWorker[i] < 0)
+                    int fdFromWorker;
+                    ec_neg1(readn(MANAGER_READ, &fdFromWorker, sizeof(int)), DS_DIE_ON_ERR);
+                        if (fdFromWorker < 0)
                         { // a client left
                             puts("dispatcher - Removed client");
                             // activeConnections--;
-                            fdFromWorker[i] *= -1;
-                            ec_neg1(removeClient(fdFromWorker[i], &toNotify), DS_DIE_ON_ERR);
+                            fdFromWorker *= -1;
+                            ec_neg1(removeClient(fdFromWorker, &toNotify), DS_DIE_ON_ERR);
+                            // TODO remove this free
+                            queueDestroy(toNotify);
                             // TODO i have to notify clients, i don't want to do it here.
                             // Use special worker or removeClient in worker using an additional mutex
-                            ec_neg1(snprintf(toLog, LOGBUF_LEN, "CLIENT LEFT: %d", fdFromWorker[i]), DS_DIE_ON_ERR);
+                            ec_neg1(snprintf(toLog, LOGBUF_LEN, "CLIENT LEFT: %d", fdFromWorker), DS_DIE_ON_ERR);
                             eo_af(LoggerLog(toLog, strlen(toLog)), DS_DIE_ON_ERR);
                             if (NoMoreClients() && myShutdown == HUP_QUIT)
                             {
@@ -294,12 +302,10 @@ void *dispatcher(void *arg)
                         else
                         {
                             puts("dispatcher - Worker has done");
-                            FD_SET(fdFromWorker[i], &set);
-                            if (fdFromWorker[i] > fd_hwm)
-                                fd_hwm = fdFromWorker[i];
+                            FD_SET(fdFromWorker, &set);
+                            if (fdFromWorker > fd_hwm)
+                                fd_hwm = fdFromWorker;
                         }
-                        i++;
-                    }
                 }
                 else if (fd == SIGNAL_READ) // Wake from signal handler
                 {
@@ -403,6 +409,7 @@ void *worker(void *args)
         req = getRequest(fd, &specialMSG);
         if (!req && specialMSG == 1) // client closed the socket
         {
+            printf(ANSI_COLOR_GREEN "Client %d closed\n" ANSI_COLOR_RESET, fd);
             fd *= -1;
             ec_neg1(writen(WORKER_WRITE, &fd, sizeof(int)), WK_DIE_ON_ERR);
             /*
@@ -416,14 +423,17 @@ void *worker(void *args)
             */
             continue;
         }
-        else if (!req && specialMSG == 2)
-        { // termination message
-            break;
-        }
+        // TODO useless?
+        // else if (!req && specialMSG == 2)
+        // { // termination message
+        //     break;
+        // }
         else if (!req)
         {
             WK_DIE_ON_ERR;
         }
+        puts(ANSI_COLOR_GREEN "Request accepted" ANSI_COLOR_RESET);
+        // printRequest(req);
         switch (req->op)
         {
         case OPEN_FILE:
@@ -532,6 +542,8 @@ void *worker(void *args)
 
         // We need to put the ready fd back in the select's set
         ec_neg1(writen(WORKER_WRITE, &fd, sizeof(int)), WK_DIE_ON_ERR); //pipe Worker -> Manager
+        freeRequest(req);
+        req = NULL;
     }
 
 worker_cleanup:
@@ -675,5 +687,5 @@ int removeClient(int fd, queue **notifyLockers)
     ec_z(toRemove, return -1);
     ec_z(*notifyLockers = storeRemoveClient(toRemove), return -1);
 
-    return icl_hash_delete(clients, fdBuf, NULL, NULL);
+    return icl_hash_delete(clients, fdBuf, free, free);
 }

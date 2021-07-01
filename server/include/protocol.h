@@ -3,9 +3,12 @@
 
 #include <stdlib.h>
 
+#define REQ_LEN_SIZE sizeof(char)*2 + sizeof(int) + sizeof(unsigned short)*2 + sizeof(size_t) 
 /**
+ * PATH_MAX = 4096 (2bytes needed to code pathlength)
+ * 
  * Request structure: (without ';')
- *  {1B_op;1B_oflag;1B_nfiles;1B_pathLen;1B_appendLen;1B_dirnameLen;\
+ *  {1B_op;1B_oflag;4B_nfiles;2B_pathLen;2_dirnameLen;10B_appendLen;\
  *   pathLen_path;appendLen_append;dirnameLen_dirname}
  * 
  * Response structure:
@@ -40,7 +43,7 @@
 
 #define MSGLEN_DIM 10
 
-// #define NO_FLAGS 0
+#define NO_FLAGS 0
 #define ONLY_CREAT 1
 #define ONLY_LOCK 2
 #define BOTH_FLAGS 3
@@ -49,8 +52,7 @@
 
 #define INT_LEN 7
 
-
-char *sockName = "";
+#define UNIX_PATH_MAX 108
 
 #define SZCHAR sizeof(char)
 

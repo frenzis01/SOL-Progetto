@@ -30,6 +30,9 @@ bin/mt_filesys: test/mt_filesys.c lib/libfilesys.so lib/libqueue.so lib/libconn.
 bin/parser:	test/parser.c lib/libparser.so lib/libqueue.so
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lqueue -lparser
 
+bin/clientApi: test/clientApi.c lib/libclientApi.so $(INCDIR)/protocol.h
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lclientApi
+
 #shared libs
 lib/libqueue.so: lib/queue.o $(INCDIR)/queue.h
 	$(CC) -shared -o $@ $<
@@ -56,6 +59,10 @@ lib/libserver.so: lib/server.o $(INCDIR)/server.h $(LIBS_SERVER_SO)
 #client libs
 lib/libparser.so: lib/parser.o lib/libqueue.so lib/libutils.so $(INCDIR)/parser.h
 	$(CC) -shared -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lqueue -lutils
+
+lib/libclientApi.so: lib/clientApi.o lib/libutils.so $(INCDIR)/clientApi.h
+	$(CC) -shared -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lutils
+
 
 #generic stuff
 lib/%.o: ./src/%.c

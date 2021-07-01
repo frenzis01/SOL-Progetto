@@ -42,7 +42,7 @@
 
 #define ec_nz(s, c) \
     /*puts(#s);*/   \
-    if (s)          \
+    if ((s))          \
     {               \
         perror(#s); \
         c;          \
@@ -80,12 +80,6 @@
         c;      \
     }
 
-#define ec_nz_f(s, c)                               \
-    if (!errno && (s))                              \
-    {                                               \
-        perror(ANSI_COLOR_RED #s ANSI_COLOR_RESET); \
-        c;                                          \
-    }
 
 #define ec_z_f(s, c)                                \
     if (!errno && !(s))                             \

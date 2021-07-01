@@ -12,7 +12,6 @@
         return -1;                                             \
     }
 
-#define FORMAT_STR "%c%04d%02hu%010ld%02hu%s%s%s"
 
 char skname[UNIX_PATH_MAX] = ""; // active connection
 int skfd = 0;
@@ -91,9 +90,6 @@ int openFile(const char *pathname, int flags)
     const char cflags = flags;
     char *req;
     ec_z(req = genRequest(reqLen, OPEN_FILE, cflags, 0, pathLen, 0, 0, pathname, "", ""), return -1);
-    // if(snprintf(req, reqLen, "%c%c%04d%02hu%02hu%010ld%s%s%s" ,OPEN_FILE,cflags,0,pathLen,0,(size_t*)0,pathname,"","") < 0) {
-    //     return -1;
-    // }
     char res = 0;
     ec_neg1(writen(skfd, req, reqLen), return -1);
     free(req);

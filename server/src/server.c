@@ -167,6 +167,7 @@ int main(void)
 
     for (size_t i = 0; i < poolSize; i++)
     {
+        // TODO pthread_timedjoin_np()
         ec_neg1(pthread_join(workers[i], NULL), exit(EXIT_FAILURE));
     }
     puts("All workers joined");

@@ -14,6 +14,7 @@ LIBS_SERVER_SO = lib/libqueue.so lib/libutils.so lib/liblogger.so lib/libfilesys
 
 bin/server: src/server.c lib/libserver.so $(INCDIR)/server.h
 	rm -f sock
+	rm -f log.txt
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' $(LIBS)
 
 #My own tests

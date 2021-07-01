@@ -1,6 +1,9 @@
 #ifndef FILESYS_H
 #define FILESYS_H
 
+#define _POSIX_C_SOURCE 200809L
+
+
 #include <icl_hash.h>
 #include <queue.h>
 #include <logger.h>

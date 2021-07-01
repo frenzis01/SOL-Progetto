@@ -46,6 +46,9 @@ queue *queueCreate(void (*freeValue)(void *), int (*compare)(void *, void *))
 	return q;
 }
 
+/**
+ * @returns 0 success, -1 error
+ */
 int queueEnqueue(queue *q, void *_data)
 {
 	errno = 0;

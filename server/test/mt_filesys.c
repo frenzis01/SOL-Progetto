@@ -77,7 +77,7 @@ int main(void)
     initClients(fakeClients);
 
     LoggerCreate("log.txt");
-    storeInit(100, 1000, 1);
+    storeInit(100, 1000, 0);
 
     // PseudoWorker
     pthread_t workers[NWORKERS];
@@ -254,9 +254,9 @@ char *rFile()
     return paths[rand() % NFILES];
 }
 
-char *rContent()
-{
-}
+// char *rContent()
+// {
+// }
 
 char *gen_random(char *s, const int len)
 {

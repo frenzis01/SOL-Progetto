@@ -1156,10 +1156,19 @@ void printFD(void *arg)
     printf("  FD: %d\n", c->fd);
     return;
 }
+
+void printString(const char *str, size_t len){
+    for (size_t i = 0; i < len; i++)
+    {
+        printf("%c", str[i]);
+    }
+}
 void printEvicted(void *arg)
 {
     evictedFile *c = arg;
-    printf(ANSI_COLOR_MAGENTA "EVCTD -- PATH: %s | CONTENT: %.*s\n" ANSI_COLOR_RESET, c->path, (int)c->size, c->content);
+    printf(ANSI_COLOR_MAGENTA "EVCTD -- PATH: %s | CONTENT: ", c->path);
+    printString(c->content,c->size);
+    printf(ANSI_COLOR_RESET "\n");
     printf(" LOCKERS:\n");
     queueCallback(c->notifyLockers, printFD);
 
@@ -1169,7 +1178,9 @@ void printEvicted(void *arg)
 void printFnode(void *arg)
 {
     fnode *c = arg;
-    printf(ANSI_COLOR_GREEN "FNODE -- PATH: %s | CONTENT: %.*s\n" ANSI_COLOR_RESET, c->path, (int)c->size, c->content);
+    printf(ANSI_COLOR_GREEN "FNODE -- PATH: %s | CONTENT: ", c->path);
+    printString(c->content,c->size);
+    printf(ANSI_COLOR_RESET "\n");
     printf(" LOCKERS:\n");
     queueCallback(c->lockersPending, printFD);
     printf(" OPENERS:\n");

@@ -1,5 +1,0 @@
-Fri Jul  2 00:32:08 2021-SERVER STARTUP
-Fri Jul  2 00:32:13 2021-CLIENT NEW: 9
-Fri Jul  2 00:32:13 2021-3__1__openFile(req->path, req->o_creat, req->o_lock, req->client, &evicted)__No such file or directory
-Fri Jul  2 00:32:13 2021-CLIENT LEFT: 9
-Fri Jul  2 00:32:16 2021-SERVER SHUTDOW

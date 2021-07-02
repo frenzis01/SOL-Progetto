@@ -282,31 +282,31 @@ void *dispatcher(void *arg)
 
                     int fdFromWorker;
                     ec_neg1(readn(MANAGER_READ, &fdFromWorker, sizeof(int)), DS_DIE_ON_ERR);
-                        if (fdFromWorker < 0)
-                        { // a client left
-                            puts("dispatcher - Removed client");
-                            // activeConnections--;
-                            fdFromWorker *= -1;
-                            ec_neg1(removeClient(fdFromWorker, &toNotify), DS_DIE_ON_ERR);
-                            // TODO remove this free
-                            queueDestroy(toNotify);
-                            // TODO i have to notify clients, i don't want to do it here.
-                            // Use special worker or removeClient in worker using an additional mutex
-                            ec_neg1(snprintf(toLog, LOGBUF_LEN, "CLIENT LEFT: %d", fdFromWorker), DS_DIE_ON_ERR);
-                            eo_af(LoggerLog(toLog, strlen(toLog)), DS_DIE_ON_ERR);
-                            if (NoMoreClients() && myShutdown == HUP_QUIT)
-                            {
-                                // done reading
-                                goto dispatcher_cleanup;
-                            }
-                        }
-                        else
+                    if (fdFromWorker < 0)
+                    { // a client left
+                        // activeConnections--;
+                        fdFromWorker *= -1;
+                        printf("dispatcher - Removing client %d\n", fdFromWorker);
+                        ec_neg1(removeClient(fdFromWorker, &toNotify), DS_DIE_ON_ERR);
+                        // TODO remove this free
+                        queueDestroy(toNotify);
+                        // TODO i have to notify clients, i don't want to do it here.
+                        // Use special worker or removeClient in worker using an additional mutex
+                        ec_neg1(snprintf(toLog, LOGBUF_LEN, "CLIENT LEFT: %d", fdFromWorker), DS_DIE_ON_ERR);
+                        eo_af(LoggerLog(toLog, strlen(toLog)), DS_DIE_ON_ERR);
+                        if (NoMoreClients() && myShutdown == HUP_QUIT)
                         {
-                            puts("dispatcher - Worker has done");
-                            FD_SET(fdFromWorker, &set);
-                            if (fdFromWorker > fd_hwm)
-                                fd_hwm = fdFromWorker;
+                            // done reading
+                            goto dispatcher_cleanup;
                         }
+                    }
+                    else
+                    {
+                        puts("dispatcher - Worker has done");
+                        FD_SET(fdFromWorker, &set);
+                        if (fdFromWorker > fd_hwm)
+                            fd_hwm = fdFromWorker;
+                    }
                 }
                 else if (fd == SIGNAL_READ) // Wake from signal handler
                 {
@@ -390,6 +390,7 @@ void *worker(void *args)
     queue
         *evictedList = NULL,
         *notifyLockers = NULL;
+    size_t nEvicted = 0;
 
     snprintf(deathMSG, 14 + sizeof(size_t), "WORKER DIED: %ld", myTid); // will be used in WK_DIE_ON_ERR
 
@@ -438,12 +439,13 @@ void *worker(void *args)
         switch (req->op)
         {
         case OPEN_FILE:
-            /* code */
             log(openFile(req->path, req->o_creat, req->o_lock, req->client, &evicted), myTid, WK_DIE_ON_ERR);
             break;
+
         case READ_FILE:
             log(readFile(req->path, &evicted, req->client, 0), myTid, WK_DIE_ON_ERR);
             break;
+
         case READN_FILES:
             log(readNfiles(req->nfiles, &evictedList, req->client), myTid, WK_DIE_ON_ERR);
             break;
@@ -481,27 +483,19 @@ void *worker(void *args)
         default:
             break;
         }
-        /* if (res == -1)
+
+        //SEND RESPONSE TO CLIENT
+        ec_neg1(sendResponseCode(fd, errnosave), WK_DIE_ON_ERR);
+
+        if ((!evicted || !evictedList) &&
+            req->op != CLOSE_FILE &&
+            req->op != LOCK_FILE &&
+            req->op != CLOSE_FILE)
         {
-            // perror?
-
-            //free everything
-            queueDestroy(evictedList);
-            queueDestroy(notifyLockers);
-            freeEvicted(evicted);
-            evicted = NULL;
-            evictedList = NULL;
-            notifyLockers = NULL;
-
-            //HANDLE INTERNAL ERROR
-
-            break; // ?
-        }
-        else */
-        // if (res != -1) shouldn't be necessary
-        {
-            //SEND RESPONSE TO CLIENT
-            ec_neg1(sendResponseCode(fd, errnosave), WK_DIE_ON_ERR);
+            // in this case, we have to notify the client he has not to expect
+            // any evicted files
+            nEvicted = 0;
+            ec_neg1(writen(fd, &nEvicted, sizeof(size_t)), WK_DIE_ON_ERR);
         }
         // Send back to client and notify pending lockers
         if (evictedList)
@@ -524,6 +518,9 @@ void *worker(void *args)
         if (evicted)
         {
             //Can be openVictim or readFile target
+            nEvicted = 1;
+            ec_neg1(writen(fd, &nEvicted, sizeof(size_t)), WK_DIE_ON_ERR);
+
             ec_neg1(sendFileToClient(evicted, fd), WK_DIE_ON_ERR);
             if (req->op != READ_FILE) // if it is a victim
             {
@@ -568,23 +565,23 @@ int sendResponseCode(int fd, int errnosave)
     {
     case ENOENT:
         *buf = FILE_NOT_FOUND;
-        ec_n(writen(fd, buf, 1), 1, { /* handle error*/ return -1; });
+        ec_n(writen(fd, buf, 1), 1, return -1;);
         break;
     case EACCES:
         *buf = NO_ACCESS;
-        ec_n(writen(fd, buf, 1), 1, { /* handle error*/ return -1; });
+        ec_n(writen(fd, buf, 1), 1, return -1;);
         break;
     case EFBIG:
         *buf = TOO_BIG;
-        ec_n(writen(fd, buf, 1), 1, { /* handle error*/ return -1; });
+        ec_n(writen(fd, buf, 1), 1, return -1;);
         break;
     case EADDRINUSE:
         *buf = ALREADY_EXISTS;
-        ec_n(writen(fd, buf, 1), 1, { /* handle error*/ return -1; });
+        ec_n(writen(fd, buf, 1), 1, return -1;);
         break;
     case 0:
         *buf = SUCCESS;
-        ec_n(writen(fd, buf, 1), 1, { /* handle error*/ return -1; });
+        ec_n(writen(fd, buf, 1), 1, return -1;);
         break;
     default:
         break;
@@ -592,28 +589,27 @@ int sendResponseCode(int fd, int errnosave)
     return 0;
 }
 
-#define BUFSIZE MSGLEN_DIM + strlen(fptr->path) + MSGLEN_DIM + fptr->size + 1
+#define BUFSIZE sizeof(size_t) + strlen(fptr->path) + sizeof(size_t) + fptr->size + 1
 /**
  * Sends and evicted file to a client. Doens't notify the (pending) lockers
  */
 int sendFileToClient(evictedFile *fptr, int fd)
 {
     char *buf = NULL;
-    // TODO '+1' ok? Sì, perchè buf sarà stringa e servirà '\0'
+    int index = 0;
     ec_z(buf = calloc(BUFSIZE, 1), return -1);
-    // {10B_pathLen,path,10B_size,content}
-    // path + size
-    ec_n(snprintf(buf, BUFSIZE - fptr->size, "%010ld%s%010ld", strlen(fptr->path), fptr->path, fptr->size),
-         BUFSIZE - fptr->size,
-         {
-             free(buf);
-             return -1;
-         });
-    // content
-    memcpy(buf + strlen(buf), fptr->content, fptr->size);
+    // {pathLen,path,size,content}
+    size_t pathLen = strnlen(fptr->path, PATH_MAX);
+    memcpy(buf, &pathLen, sizeof(size_t));
+    index += sizeof(size_t);
+    memcpy(buf + index, fptr->path, pathLen);
+    index += pathLen;
+    memcpy(buf + index, &(fptr->size), sizeof(size_t));
+    index += sizeof(size_t);
+    memcpy(buf + index, fptr->content, fptr->size);
 
     // write to the client
-    ec_n(writen(fd, buf, BUFSIZE), BUFSIZE, free(buf); return -1;);
+    ec_neg1(writen(fd, buf, BUFSIZE), free(buf); return -1;);
     return 0; // success
 }
 

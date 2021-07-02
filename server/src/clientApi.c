@@ -12,10 +12,30 @@
         return -1;                                             \
     }
 
+typedef struct {
+    char 
+        *path,
+        *content;
+    size_t pathLen, size;
+} evictedFile;
+
+void printString(const char *str, size_t len){
+    for (size_t i = 0; i < len; i++)
+        printf("%c", str[i]);
+}
+void printEvicted(void *arg)
+{
+    evictedFile *c = arg;
+    printf(ANSI_COLOR_MAGENTA "EVCTD -- PATH: %s | CONTENT: ", c->path);
+    printString(c->content,c->size);
+    printf(ANSI_COLOR_RESET "\n");
+    return;
+}
 
 char skname[UNIX_PATH_MAX] = ""; // active connection
 int skfd = 0;
 _Bool pFlag = 1;
+char *dirEvicted = NULL;
 
 int readResponseCode(char res);
 
@@ -79,25 +99,50 @@ int closeConnection(const char *sockname)
  */
 int openFile(const char *pathname, int flags)
 {
+    p(printf("openFile__%s__%d",pathname, flags))
     if ((flags < 0 || flags > 3) || !pathname)
     {
+        p(puts("Invalid argument"))
         errno = EINVAL;
         return -1;
     }
+    // SEND REQUEST
     unsigned short pathLen = strnlen(pathname, PATH_MAX);
-    printf("%hd %s\n",pathLen,pathname);
+    // TODO note, without +1 doesn't work
     size_t reqLen = REQ_LEN_SIZE + pathLen*sizeof(char) + 1;
     const char cflags = flags;
     char *req;
     ec_z(req = genRequest(reqLen, OPEN_FILE, cflags, 0, pathLen, 0, 0, pathname, "", ""), return -1);
-    char res = 0;
     ec_neg1(writen(skfd, req, reqLen), return -1);
     free(req);
+
+    // GET RESPONSE
+    char res = 0;
+    size_t nEvicted = 0;
+    ec_neg1(readn(skfd, &nEvicted, sizeof(size_t)), return -1);
     ec_neg1(readn(skfd, &res, sizeof(char)), return -1);
     p(readResponseCode(res));
+    if (nEvicted) {
+        evictedFile fptr;
+        ec_neg1(readn(skfd,&fptr.pathLen,sizeof(size_t)), return -1);
+        ec_neg1(readn(skfd,&fptr.path,pathLen), return -1);
+        ec_neg1(readn(skfd,&fptr.size,sizeof(size_t)), return -1);
+        ec_neg1(readn(skfd,&fptr.content,fptr.size), return -1);
+        p(printEvicted(&fptr));
+        if (dirEvicted){
+            // TODO store file
+            p(printf("File stored in %s\n", dirEvicted));
+        }
+        p(printf("File trashed\n"));
+
+    }
     return 0;
 }
 
+
+int readFile(const char* pathname, void** buf, size_t*size) {
+
+}
 int readNFiles(int N, const char *dirname);
 int writeFile(const char *pathname, const char *dirname);
 int appendToFile(const char *pathname, void *buf, size_t size, const char *dirname);

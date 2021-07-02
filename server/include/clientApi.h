@@ -14,6 +14,7 @@
 #include <sys/un.h>
 #include <time.h>
 #include <limits.h>
+#include <stdarg.h>
 
 
 int openConnection(const char* sockname, int msec,const struct timespec abstime);

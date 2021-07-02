@@ -43,7 +43,6 @@ typedef struct
 #define CONFIG_PATH "config.txt"
 
 // Prototypes
-int sendResponseCode(int fd, int errnosave);
 int sendFileToClient(evictedFile *fptr, int fd);
 int notifyFailedLockers(queue *lockers, const short msg);
 void *signalHandler(void *args);
@@ -396,6 +395,7 @@ void *worker(void *args)
 
     while (!myShutdown)
     {
+        specialMSG = 0; // useful later
         // GET A REQUEST
         ec_nz(pthread_mutex_lock(&lockReq), {});
 
@@ -435,7 +435,7 @@ void *worker(void *args)
             WK_DIE_ON_ERR;
         }
         puts(ANSI_COLOR_GREEN "Request accepted" ANSI_COLOR_RESET);
-        // printRequest(req);
+        printRequest(req);
         switch (req->op)
         {
         case OPEN_FILE:
@@ -468,7 +468,8 @@ void *worker(void *args)
             log(unlockFile(req->path, req->client), myTid, WK_DIE_ON_ERR);
             if (res > 1) // notify new lock owner
             {
-                ec_neg1(sendResponseCode(res, 0), WK_DIE_ON_ERR);
+                errnosave = 0;
+                ec_neg1(writen(fd, &errnosave, sizeof(int)), WK_DIE_ON_ERR);
             }
             break;
 
@@ -485,12 +486,13 @@ void *worker(void *args)
         }
 
         //SEND RESPONSE TO CLIENT
-        ec_neg1(sendResponseCode(fd, errnosave), WK_DIE_ON_ERR);
+        errnosave = res == 0 ? res : errnosave;
+        ec_neg1(writen(fd, &errnosave, sizeof(int)), WK_DIE_ON_ERR);
 
         if ((!evicted || !evictedList) &&
-            req->op != CLOSE_FILE &&
-            req->op != LOCK_FILE &&
-            req->op != CLOSE_FILE)
+            (req->op == OPEN_FILE ||
+             req->op == APPEND ||
+             req->op == WRITE_FILE))
         {
             // in this case, we have to notify the client he has not to expect
             // any evicted files
@@ -552,41 +554,6 @@ worker_cleanup:
     evictedList = NULL;
     notifyLockers = NULL;
     return NULL;
-}
-
-/**
- * Sends response code
- */
-int sendResponseCode(int fd, int errnosave)
-{
-    char buf[1];
-    // TODO okay to use buf[1] like this?
-    switch (errnosave)
-    {
-    case ENOENT:
-        *buf = FILE_NOT_FOUND;
-        ec_n(writen(fd, buf, 1), 1, return -1;);
-        break;
-    case EACCES:
-        *buf = NO_ACCESS;
-        ec_n(writen(fd, buf, 1), 1, return -1;);
-        break;
-    case EFBIG:
-        *buf = TOO_BIG;
-        ec_n(writen(fd, buf, 1), 1, return -1;);
-        break;
-    case EADDRINUSE:
-        *buf = ALREADY_EXISTS;
-        ec_n(writen(fd, buf, 1), 1, return -1;);
-        break;
-    case 0:
-        *buf = SUCCESS;
-        ec_n(writen(fd, buf, 1), 1, return -1;);
-        break;
-    default:
-        break;
-    }
-    return 0;
 }
 
 #define BUFSIZE sizeof(size_t) + strlen(fptr->path) + sizeof(size_t) + fptr->size + 1

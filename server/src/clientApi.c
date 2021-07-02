@@ -12,14 +12,16 @@
         return -1;                                             \
     }
 
-typedef struct {
-    char 
+typedef struct
+{
+    char
         *path,
         *content;
     size_t pathLen, size;
 } evictedFile;
 
-void printString(const char *str, size_t len){
+void printString(const char *str, size_t len)
+{
     for (size_t i = 0; i < len; i++)
         printf("%c", str[i]);
 }
@@ -27,7 +29,7 @@ void printEvicted(void *arg)
 {
     evictedFile *c = arg;
     printf(ANSI_COLOR_MAGENTA "EVCTD -- PATH: %s | CONTENT: ", c->path);
-    printString(c->content,c->size);
+    printString(c->content, c->size);
     printf(ANSI_COLOR_RESET "\n");
     return;
 }
@@ -37,8 +39,8 @@ int skfd = 0;
 _Bool pFlag = 1;
 char *dirEvicted = NULL;
 
-int readResponseCode(char res);
-
+evictedFile *readEvicted();
+void freeEvicted(void *arg);
 char *genRequest(size_t reqLen,
                  char op,
                  char flags,
@@ -99,53 +101,138 @@ int closeConnection(const char *sockname)
  */
 int openFile(const char *pathname, int flags)
 {
-    p(printf("openFile__%s__%d",pathname, flags))
+    p(printf("openFile__%s__%d: ", pathname, flags));
     if ((flags < 0 || flags > 3) || !pathname)
     {
         p(puts("Invalid argument"))
-        errno = EINVAL;
+            errno = EINVAL;
         return -1;
     }
     // SEND REQUEST
     unsigned short pathLen = strnlen(pathname, PATH_MAX);
     // TODO note, without +1 doesn't work
-    size_t reqLen = REQ_LEN_SIZE + pathLen*sizeof(char) + 1;
+    printf("%ld, %ld\n",REQ_LEN_SIZE, pathLen * sizeof(char));
+    size_t reqLen = REQ_LEN_SIZE + pathLen * sizeof(char);
     const char cflags = flags;
     char *req;
     ec_z(req = genRequest(reqLen, OPEN_FILE, cflags, 0, pathLen, 0, 0, pathname, "", ""), return -1);
-    ec_neg1(writen(skfd, req, reqLen), return -1);
+    ec_neg1(write(skfd, req, reqLen), free(req); return -1);
+    printf("\n%ld", reqLen);
     free(req);
 
     // GET RESPONSE
-    char res = 0;
+    int res = 0;
     size_t nEvicted = 0;
+    ec_neg1(readn(skfd, &res, sizeof(int)), return -1);
     ec_neg1(readn(skfd, &nEvicted, sizeof(size_t)), return -1);
-    ec_neg1(readn(skfd, &res, sizeof(char)), return -1);
-    p(readResponseCode(res));
-    if (nEvicted) {
-        evictedFile fptr;
-        ec_neg1(readn(skfd,&fptr.pathLen,sizeof(size_t)), return -1);
-        ec_neg1(readn(skfd,&fptr.path,pathLen), return -1);
-        ec_neg1(readn(skfd,&fptr.size,sizeof(size_t)), return -1);
-        ec_neg1(readn(skfd,&fptr.content,fptr.size), return -1);
+
+    p(puts(strerror(res)));
+
+    if (nEvicted)
+    {
+        evictedFile *fptr = readEvicted();
+        ec_z(fptr, return -1);
         p(printEvicted(&fptr));
-        if (dirEvicted){
+        if (dirEvicted)
+        {
             // TODO store file
             p(printf("File stored in %s\n", dirEvicted));
         }
+        freeEvicted(fptr);
         p(printf("File trashed\n"));
-
     }
-    return 0;
+    errno = res ? res : errno;
+    return res ? -1 : 0;
 }
 
+/**
+ * @param buf where to store the read file's content
+ * @param size content's size
+ */
+int readFile(const char *pathname, void **buf, size_t *size)
+{
+    p(printf("readFile__%s: ", pathname));
+    if (!pathname)
+    {
+        p(puts("Invalid argument"))
+            errno = EINVAL;
+        return -1;
+    }
+    // SEND REQUEST
+    unsigned short pathLen = strnlen(pathname, PATH_MAX);
+    size_t reqLen = REQ_LEN_SIZE + pathLen * sizeof(char);
+    char *req;
+    ec_z(req = genRequest(reqLen, READ_FILE, 0, 0, pathLen, 0, 0, pathname, "", ""), return -1);
+    ec_neg1(writen(skfd, req, reqLen), free(req); return -1);
+    free(req);
 
-int readFile(const char* pathname, void** buf, size_t*size) {
+    // GET RESPONSE
+    int res = 0;
+    ec_neg1(readn(skfd, &res, sizeof(int)), return -1);
+    p(puts(strerror(res)));
 
+    if (res == SUCCESS) // SUCCESS
+    {
+        evictedFile *fptr = readEvicted();
+        ec_z(fptr, return -1);
+        p(printEvicted(&fptr));
+
+        // copy evicted's content in buf
+        ec_z(*buf = malloc(sizeof(char) * fptr->size), freeEvicted(fptr); return -1);
+        memcpy(buf, fptr->content, fptr->size);
+        *size = fptr->size;
+
+        freeEvicted(fptr);
+        // p(printf("File trashed\n"));
+    }
+    errno = res ? res : errno;
+    return res ? -1 : 0;
 }
 int readNFiles(int N, const char *dirname);
 int writeFile(const char *pathname, const char *dirname);
-int appendToFile(const char *pathname, void *buf, size_t size, const char *dirname);
+/**
+ * @param buf content to append
+ * @param size buf's size
+ * @param dirname if != NULL, store evicted files here, if any
+ */
+int appendToFile(const char *pathname, void *buf, size_t size, const char *dirname)
+{
+    p(printf("appendToFile__%s__%ld__%s: ", pathname, size, dirname));
+    if (!pathname || !buf)
+    {
+        p(puts("Invalid argument"))
+            errno = EINVAL;
+        return -1;
+    }
+    // SEND REQUEST
+    unsigned short pathLen = strnlen(pathname, PATH_MAX);
+    unsigned short dirnameLen = 0;
+    // dirname ? dirnameLen=strnlen(dirname, PATH_MAX) : dirname;
+    dirnameLen = dirname ? strnlen(dirname, PATH_MAX) : 0;
+    size_t reqLen = REQ_LEN_SIZE + pathLen * sizeof(char) + dirnameLen * sizeof(char) + size;
+    char *req;
+    ec_z(req = genRequest(reqLen, APPEND, 0, 0, pathLen, dirnameLen, size, pathname, dirname, buf), return -1);
+    ec_neg1(writen(skfd, req, reqLen), free(req); return -1);
+    free(req);
+
+    // GET RESPONSE
+    int res = 0;
+    size_t nEvicted = 0;
+    ec_neg1(readn(skfd, &res, sizeof(int)), return -1);
+    ec_neg1(readn(skfd, &nEvicted, sizeof(size_t)), return -1);
+    p(puts(strerror(res)));
+
+    while (nEvicted--){
+        evictedFile *fptr = readEvicted();
+        ec_z(fptr, return -1);
+        p(printEvicted(&fptr));
+        // TODO store to dirname
+        freeEvicted(fptr);
+        // p(printf("File trashed\n"));
+    }
+    errno = res ? res : errno;
+    return res ? -1 : 0;
+}
 int lockFile(const char *pathname);
 int unlockFile(const char *pathname);
 int closeFile(const char *pathname);
@@ -183,36 +270,29 @@ char *genRequest(size_t reqLen,
     memcpy(buf + index, dirname, dirnameLen * sizeof(char));
     index += dirnameLen * sizeof(char);
     memcpy(buf + index, append, appendLen);
-    index += appendLen;
 
     return buf;
 }
 
-/**
- * Reads response code
- */
-int readResponseCode(char res)
+evictedFile *readEvicted()
 {
-    switch (res)
-    {
-    case FILE_NOT_FOUND:
-        puts("FILE_NOT_FOUND");
-        break;
-    case NO_ACCESS:
-        puts("NO_ACCESS");
-        break;
-    case TOO_BIG:
-        puts("TOO_BIG");
-        break;
-    case ALREADY_EXISTS:
-        puts("ALREADY_EXISTS");
-        break;
-    case SUCCESS:
-        puts("SUCCESS");
-        break;
-    default:
-        puts("Something bad happened");
-        break;
-    }
-    return 0;
+    evictedFile *f;
+    ec_z(f = malloc(sizeof(evictedFile)), return NULL);
+    f->path = NULL;
+    f->content = NULL;
+    ec_neg1(readn(skfd, &f->pathLen, sizeof(size_t)), freeEvicted(f); return NULL);
+    ec_z(f->path = calloc(f->pathLen, sizeof(char)), freeEvicted(f); return NULL)
+        ec_neg1(readn(skfd, f->path, f->pathLen), freeEvicted(f); return NULL);
+    ec_neg1(readn(skfd, &f->size, sizeof(size_t)), freeEvicted(f); return NULL);
+    ec_z(f->content = calloc(f->size, sizeof(char)), freeEvicted(f); return NULL)
+        ec_neg1(readn(skfd, f->content, f->size), freeEvicted(f); return NULL);
+    return f;
+}
+
+void freeEvicted(void *arg)
+{
+    evictedFile *f = arg;
+    free(f->content);
+    free(f->path);
+    free(f);
 }

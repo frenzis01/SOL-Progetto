@@ -10,44 +10,69 @@ Request *getRequest(int fd, int *msg)
     errno = 0;
     Request *req;
     ec_z(req = malloc(sizeof(Request)), return NULL);
-    char oflags,fdBuf[INT_LEN];
+    char oflags, fdBuf[INT_LEN];
     req->path = NULL;
     req->append = NULL;
     req->dirname = NULL;
-    // char per leggere un intero di 1 byte
     //    Request structure: (without ';')
     //   {1B_op;1B_oflag;4B_nfiles;2B_pathLen;2_dirnameLen;10B_appendLen;
     //    pathLen_path;appendLen_append;dirnameLen_dirname}
 
-    // LETTURA FLAGS e LUNGHEZZE
-
     // sizeof(char) dovrebbe essere sempre 1, ma lasciamo sizeof(char)
     // NB: se la read fallisce, setta errno e lo gestirà il chiamante
-    ec_neg1(readn(fd, &(req->op), SZCHAR), free(req); return NULL;); // should read 1 byte
-    if (req->op == 0)                                                   // client closed the connection
+
+    int bread = 0, singleRead;
+    ec_neg1(singleRead = readn(fd, &(req->op), SZCHAR), free(req); return NULL;); // should read 1 byte
+    printf("%d\n", singleRead);
+    bread += singleRead;
+
+    if (req->op == 0) // client closed the connection
     {
         *msg = 1;
         free(req);
         return NULL;
     }
 
-    ec_neg1(readn(fd, &(oflags), SZCHAR), free(req); return NULL;);
-    ec_neg1(readn(fd, &(req->nfiles), SZINT), free(req); return NULL;);
-    ec_neg1(readn(fd, &(req->pathLen), SZSHORT), free(req); return NULL;);
-    ec_neg1(readn(fd, &(req->dirnameLen), SZSHORT), free(req); return NULL;);
-    ec_neg1(readn(fd, &(req->appendLen), sizeof(size_t)), free(req); return NULL;);
 
-    // LETTURA CAMPI "DINAMICI"
+    ec_neg1(singleRead = readn(fd, &(oflags), SZCHAR), free(req); return NULL;);
+    printf("%d\n", singleRead);
+    bread += singleRead;
+    ec_neg1(singleRead = readn(fd, &(req->nfiles), SZINT), free(req); return NULL;);
+    printf("%d\n", singleRead);
+    bread += singleRead;
+    ec_neg1(singleRead = readn(fd, &(req->pathLen), SZSHORT), free(req); return NULL;);
+    printf("%d\n", singleRead);
+    bread += singleRead;
+    ec_neg1(singleRead = readn(fd, &(req->dirnameLen), SZSHORT), free(req); return NULL;);
+    printf("%d\n", singleRead);
+    bread += singleRead;
+    ec_neg1(singleRead = readn(fd, &(req->appendLen), sizeof(size_t)), free(req); return NULL;);
+    printf("%d\n", singleRead);
+    bread += singleRead; // LETTURA CAMPI "DINAMICI"
     // TODO check +1;
     // PATH
+    int pathlen;
     ec_z(req->path = calloc(req->pathLen + 1, SZCHAR), freeRequest(req); return NULL;);
-    ec_neg1(readn(fd, req->path, req->pathLen * SZCHAR), return NULL;);
-    // DIRNAME
-    ec_z(req->dirname = calloc(req->dirnameLen + 1, SZCHAR), freeRequest(req); return NULL;);
-    ec_neg1(readn(fd, req->dirname, req->dirnameLen * SZCHAR), return NULL;);
+    ec_neg1(pathlen = readn(fd, req->path, req->pathLen * SZCHAR), return NULL;); // DIRNAME
+    printf("path: %d\n", pathlen);
+    bread += pathlen;
+    if (req->dirnameLen)
+    {
+        ec_z(req->dirname = calloc(req->dirnameLen + 1, SZCHAR), freeRequest(req); return NULL;);
+
+        ec_neg1(singleRead = readn(fd, req->dirname, req->dirnameLen * SZCHAR), return NULL;);
+        printf("%d\n", singleRead);
+        bread += singleRead;
+    }
     // APPEND
-    ec_z(req->append = calloc(req->appendLen + 1, SZCHAR), freeRequest(req); return NULL;);
-    ec_neg1(readn(fd, req->append, req->appendLen * SZCHAR), return NULL;);
+    if (req->appendLen)
+    {
+        ec_z(req->append = calloc(req->appendLen + 1, SZCHAR), freeRequest(req); return NULL;);
+
+        ec_neg1(singleRead = readn(fd, req->append, req->appendLen * SZCHAR), return NULL;);
+        printf("%d\n", singleRead);
+        bread += singleRead;
+    }
 
     // Conversione a unsigned short
     // TODO è brutto castare implicitamente un char a unsigned short?
@@ -57,6 +82,7 @@ Request *getRequest(int fd, int *msg)
     ec_neg1(snprintf(fdBuf, INT_LEN, "%06d", fd), freeRequest(req); return NULL;);
     ec_z(req->client = icl_hash_find(clients, fdBuf), freeRequest(req); errno = EBADF; return NULL;);
 
+    printf("bytes read: %d\n", bread);
     return req;
 }
 

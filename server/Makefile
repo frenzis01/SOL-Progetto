@@ -75,4 +75,4 @@ clean:
 	rm -f $(TARGETS)
 
 cleanall: clean
-	rm -f $(TARGETS) lib/* bin/*
+	rm -f $(TARGETS) lib/* bin/* log.txt

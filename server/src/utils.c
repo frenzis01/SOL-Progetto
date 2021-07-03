@@ -5,6 +5,8 @@
 /** Read "n" bytes from a descriptor 
  * @returns bytes read (n - nleft), -1 on error
 */
+
+#pragma GCC diagnostic ignored "-Wpointer-arith"
 ssize_t 
 readn(int fd, void *ptr, size_t n)
 {
@@ -55,6 +57,7 @@ writen(int fd, void *ptr, size_t n)
     }
     return (n - nleft); /* return >= 0 */
 }
+#pragma GCC diagnostic pop
 
 // Non rimuove newline \n
 char *readLineFromFILEn(char *inputfer, unsigned int len, FILE *fp)

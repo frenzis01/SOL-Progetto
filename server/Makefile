@@ -1,5 +1,5 @@
 CC		=  gcc
-CFLAGS	        = -g -std=c99 -Wall -pedantic
+CFLAGS	        = -g -std=c99 -Wall -pedantic -Wno-unknown-pragmas
 # gli includes sono nella directory include
 INCDIR          = ./include
 # cerco gli include oltre che in INCDIR anche nella dir. corrente
@@ -26,13 +26,13 @@ bin/filesys: test/filesys.c lib/libfilesys.so lib/libqueue.so lib/libconn.so lib
 bin/mt_filesys: test/mt_filesys.c lib/libfilesys.so lib/libqueue.so lib/libconn.so lib/liblogger.so
 	#filesys multithread
 	rm -f log.txt
-	$(CC) $(CFLAGS) -fno-stack-protector $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lfilesys -lqueue -lconn -llogger -lpthread
+	$(CC) $(CFLAGS) -fno-stack-protector $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lfilesys -lqueue -lconn -llogger -licl_hash -lpthread
 
 bin/parser:	test/parser.c lib/libparser.so lib/libqueue.so
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lqueue -lparser
 
 bin/clientApi: test/clientApi.c lib/libclientApi.so $(INCDIR)/protocol.h
-	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lclientApi
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lclientApi -lutils
 
 #shared libs
 lib/libqueue.so: lib/queue.o $(INCDIR)/queue.h

@@ -134,7 +134,7 @@ int readFile(char *path, evictedFile **toRet, Client *client, _Bool readN)
 /**
  * @param n #{files to be read}, If <= 0 then read every file in the storage
  * @param client Needed to check O_LOCK, not if he's an opener, for each file examinated
- * @returns 0 success, -1 internal error, #filesLeft 
+ * @returns 0 success, -1 internal error, #filesRead 
  * 
  */
 int readNfiles(int n, queue **toRet, Client *client)

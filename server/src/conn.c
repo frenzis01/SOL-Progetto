@@ -56,7 +56,7 @@ Request *getRequest(int fd, int *msg)
     ec_neg1(pathlen = readn(fd, req->path, req->pathLen * SZCHAR), return NULL;); // DIRNAME
     printf("path: %d\n", pathlen);
     bread += pathlen;
-    if (req->dirnameLen)
+    // if (req->dirnameLen)
     {
         ec_z(req->dirname = calloc(req->dirnameLen + 1, SZCHAR), freeRequest(req); return NULL;);
 
@@ -65,7 +65,7 @@ Request *getRequest(int fd, int *msg)
         bread += singleRead;
     }
     // APPEND
-    if (req->appendLen)
+    // if (req->appendLen)
     {
         ec_z(req->append = calloc(req->appendLen + 1, SZCHAR), freeRequest(req); return NULL;);
 

@@ -23,6 +23,7 @@ readn(int fd, void *ptr, size_t n)
         }
         else if (nread == 0)
         {
+            errno = ENOTCONN;
             break; /* EOF */
         }
         nleft -= nread;

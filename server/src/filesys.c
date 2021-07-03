@@ -200,7 +200,7 @@ int readNfiles(int n, queue **toRet, Client *client)
         nread++;
     }
     ec_nz_f(UNLOCKSTORE);
-    eo(return -1); //internal error occurred during readFile||queueEnqueue||UNLOCKSTORE
+    eo(queueDestroy(*toRet); return -1); //internal error occurred during readFile||queueEnqueue||UNLOCKSTORE
     return n;
 }
 

@@ -26,7 +26,6 @@ void freeArr(void **arr, size_t n, void (*myfree)(void *arg));
 
 int main(void)
 {
-    int myerr = 0;
 
 // TEST FILESYSTEM
 #define NCLIENTS 4

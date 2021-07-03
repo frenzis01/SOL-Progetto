@@ -56,6 +56,14 @@
         c;            \
     }
 
+#define ec_neg(s, c) \
+    /*puts(#s);*/     \
+    if ((s) < 0)  \
+    {                 \
+        perror(#s);   \
+        c;            \
+    }
+
 #define ec_z(s, c)  \
     /*puts(#s);*/   \
     if (!(s))       \

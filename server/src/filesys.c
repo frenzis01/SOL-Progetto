@@ -200,8 +200,8 @@ int readNfiles(int n, queue **toRet, Client *client)
         nread++;
     }
     ec_nz_f(UNLOCKSTORE);
-    eo(queueDestroy(*toRet); return -1); //internal error occurred during readFile||queueEnqueue||UNLOCKSTORE
-    return n;
+    eo(return -1); //internal error occurred during readFile||queueEnqueue||UNLOCKSTORE
+    return (*toRet)->size;
 }
 
 /**
@@ -1160,31 +1160,32 @@ void printFD(void *arg)
 void printString(const char *str, size_t len){
     for (size_t i = 0; i < len; i++)
     {
-        printf("%c", str[i]);
+        ec_neg(printf("%c", str[i]), return);
     }
 }
 void printEvicted(void *arg)
 {
     evictedFile *c = arg;
-    printf(ANSI_COLOR_MAGENTA "EVCTD -- PATH: %s | CONTENT: ", c->path);
+    ec_neg(printf(ANSI_COLOR_MAGENTA "EVCTD -- PATH: %s | CONTENT: ", c->path), return);
     printString(c->content,c->size);
-    printf(ANSI_COLOR_RESET "\n");
-    printf(" LOCKERS:\n");
+    ec_neg(printf(ANSI_COLOR_RESET "\n"), return);
+    ec_neg(printf(" LOCKERS:\n"), return);
     queueCallback(c->notifyLockers, printFD);
-
+    errno = 0;
     return;
 }
 
 void printFnode(void *arg)
 {
     fnode *c = arg;
-    printf(ANSI_COLOR_GREEN "FNODE -- PATH: %s | CONTENT: ", c->path);
+    ec_neg(printf(ANSI_COLOR_GREEN "FNODE -- PATH: %s | CONTENT: ", c->path), return);
     printString(c->content,c->size);
-    printf(ANSI_COLOR_RESET "\n");
-    printf(" LOCKERS:\n");
+    ec_neg(printf(ANSI_COLOR_RESET "\n"), return);
+    ec_neg(printf(" LOCKERS:\n"), return);
     queueCallback(c->lockersPending, printFD);
-    printf(" OPENERS:\n");
+    ec_neg(printf(" OPENERS:\n"), return);
     queueCallback(c->openBy, printFD);
+    errno = 0;
 
     return;
 }

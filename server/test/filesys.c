@@ -84,10 +84,10 @@ int main(void)
 
     // READNFILES
     queue *readFiles = NULL;
-    readNfiles(0, &readFiles, clients[0]);
-    // puts("\tREADNFILES RESULT");
+    assert(10 == readNfiles(0, &readFiles, clients[0]));
+    // printf("\tREADNFILES RESULT\n");
     // queueCallback(readFiles,printEvicted);
-    // puts("\tREADNFILES END");s
+    // puts("\tREADNFILES END");
     queueDestroy(readFiles);
 
     // APPENDTOFILE

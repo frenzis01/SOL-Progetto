@@ -452,3 +452,56 @@ void freeEvicted(void *arg)
     free(f->path);
     free(f);
 }
+
+/**
+ * Assumes f->path is absolute
+ * @returns 0 success, -1 error
+ */
+int storeFileInDir(evictedFile *f, const char *dirname)
+{
+    char
+        *dir = NULL,
+        *lastSlash = NULL,
+        command = NULL,
+        newPath = NULL;
+    FILE *fptr = NULL;
+    ec_z(dir = strndup(f->path, PATH_MAX), goto store_cleanup); // this includes the first '/'
+    ec_z(lastSlash = strrchr(dir, '/'), goto store_cleanup);
+    // if it is a valid path it has at least one '/'
+
+    // _Bool haveToCreateDir = 1;
+    // // if the last slash is the first then f is located in the root dir
+    // if (lastSlash == dir)
+    //     haveToCreateDir = 0;
+    // if (haveToCreateDir)
+
+    // CREATE DIRECTORY (along with parents)
+    dir++; // remove the first slash
+
+    // get updated path
+    ec_z(newPath = calloc(strnlen(dir, PATH_MAX) +
+                              strnlen(dirname, PATH_MAX) + 1,
+                          sizeof(char)),
+         goto store_cleanup);
+    ec_z(snprintf(newPath, PATH_MAX, "%s%s", dir, dirname), goto store_cleanup);
+
+    // create directory
+    char sh_mkdir[] = "mkdir -p "; // -p makes parents, no error if existing
+    ec_z(command = calloc(
+             strlen(sh_mkdir) + strnlen(newPath, PATH_MAX) + 1,
+             sizeof(char)),
+         goto store_cleanup);
+
+    ec_neg(snprintf(command, strlen(sh_mkdir) + PATH_MAX, "%s%s", sh_mkdir, newPath), goto store_cleanup);
+    ec_nz(system(command), goto store_cleanup);
+
+
+        // WRITE FILE
+    ec_z(fptr = fopen(newPath,"w+"), goto store_cleanup);
+
+store_cleanup:
+    free(dir);
+    free(command);
+    free(newPath);
+    return -1;
+}

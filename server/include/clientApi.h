@@ -15,6 +15,7 @@
 #include <time.h>
 #include <limits.h>
 #include <stdarg.h>
+#include <string.h>
 
 
 int openConnection(const char* sockname, int msec,const struct timespec abstime);

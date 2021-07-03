@@ -26,7 +26,7 @@ Request *getRequest(int fd, int *msg)
     printf("%d\n", singleRead);
     bread += singleRead;
 
-    if (req->op == 0) // client closed the connection
+    if (singleRead == 0) // client closed the connection
     {
         *msg = 1;
         free(req);
@@ -81,7 +81,7 @@ Request *getRequest(int fd, int *msg)
     // Only the thread dispatcher is allowed to add clients
     ec_neg1(snprintf(fdBuf, INT_LEN, "%06d", fd), freeRequest(req); return NULL;);
     ec_z(req->client = icl_hash_find(clients, fdBuf), freeRequest(req); errno = EBADF; return NULL;);
-
+    // ec_neg1(readn(fd, &singleRead, 1), freeRequest(req); return NULL);
     printf("bytes read: %d\n", bread);
     return req;
 }

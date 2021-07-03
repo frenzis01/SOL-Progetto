@@ -66,8 +66,8 @@ int openConnection(const char *sockname, int msec, const struct timespec abstime
     strncpy(sa.sun_path, sockname, UNIX_PATH_MAX);
     sa.sun_family = AF_UNIX;
     struct timespec interval;
-    interval.tv_sec = 0;
-    interval.tv_nsec = msec * 1000000;
+    interval.tv_sec = msec/1000;
+    interval.tv_nsec = 0;
 
     ec_neg1(skfd = socket(AF_UNIX, SOCK_STREAM, 0), return -1);
 
@@ -132,7 +132,7 @@ int openFile(const char *pathname, int flags)
     {
         evictedFile *fptr = readEvicted();
         ec_z(fptr, return -1);
-        p(printEvicted(&fptr));
+        p(printEvicted(fptr));
         if (dirEvicted)
         {
             // TODO store file
@@ -175,11 +175,11 @@ int readFile(const char *pathname, void **buf, size_t *size)
     {
         evictedFile *fptr = readEvicted();
         ec_z(fptr, return -1);
-        p(printEvicted(&fptr));
+        p(printEvicted(fptr));
 
         // copy evicted's content in buf
         ec_z(*buf = malloc(sizeof(char) * fptr->size), freeEvicted(fptr); return -1);
-        memcpy(buf, fptr->content, fptr->size);
+        memcpy(*buf, fptr->content, fptr->size);
         *size = fptr->size;
 
         freeEvicted(fptr);
@@ -225,7 +225,7 @@ int appendToFile(const char *pathname, void *buf, size_t size, const char *dirna
     while (nEvicted--){
         evictedFile *fptr = readEvicted();
         ec_z(fptr, return -1);
-        p(printEvicted(&fptr));
+        p(printEvicted(fptr));
         // TODO store to dirname
         freeEvicted(fptr);
         // p(printf("File trashed\n"));
@@ -281,9 +281,10 @@ evictedFile *readEvicted()
     f->path = NULL;
     f->content = NULL;
     ec_neg1(readn(skfd, &f->pathLen, sizeof(size_t)), freeEvicted(f); return NULL);
-    ec_z(f->path = calloc(f->pathLen, sizeof(char)), freeEvicted(f); return NULL)
+    ec_z(f->path = calloc(f->pathLen +1, sizeof(char)), freeEvicted(f); return NULL)
         ec_neg1(readn(skfd, f->path, f->pathLen), freeEvicted(f); return NULL);
     ec_neg1(readn(skfd, &f->size, sizeof(size_t)), freeEvicted(f); return NULL);
+    printf("\nsize: %ld\n", f->size);
     ec_z(f->content = calloc(f->size, sizeof(char)), freeEvicted(f); return NULL)
         ec_neg1(readn(skfd, f->content, f->size), freeEvicted(f); return NULL);
     return f;

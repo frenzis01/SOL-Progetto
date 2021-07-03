@@ -25,6 +25,7 @@
         c;                                                                \
     }                                                                     \
     snprintf(toLog, LOGBUF_LEN, "%ld__%d__" #s "__%s", i, res, errnoBuf); \
+    puts(toLog); \
     eo_af(LoggerLog(toLog, strlen(toLog)), WK_DIE_ON_ERR);
 
 #define PUSH_REQUEST(x)                                   \
@@ -179,7 +180,7 @@ int main(void)
     close(WORKER_WRITE);
     close(MANAGER_READ);
 
-    icl_hash_destroy(clients, NULL, NULL);
+    icl_hash_destroy(clients, free, free);
     storeDestroy();
     queueDestroy(requests);
 
@@ -519,9 +520,9 @@ void *worker(void *args)
         }
         if (evicted)
         {
-            //Can be openVictim or readFile target
-            nEvicted = 1;
-            ec_neg1(writen(fd, &nEvicted, sizeof(size_t)), WK_DIE_ON_ERR);
+            //Can be openVictim or readFile target or remove target
+            // nEvicted = 1;
+            // ec_neg1(writen(fd, &nEvicted, sizeof(size_t)), WK_DIE_ON_ERR);
 
             ec_neg1(sendFileToClient(evicted, fd), WK_DIE_ON_ERR);
             if (req->op != READ_FILE) // if it is a victim
@@ -556,7 +557,7 @@ worker_cleanup:
     return NULL;
 }
 
-#define BUFSIZE sizeof(size_t) + strlen(fptr->path) + sizeof(size_t) + fptr->size + 1
+#define BUFSIZE sizeof(size_t) + strlen(fptr->path) + sizeof(size_t) + fptr->size
 /**
  * Sends and evicted file to a client. Doens't notify the (pending) lockers
  */
@@ -577,6 +578,7 @@ int sendFileToClient(evictedFile *fptr, int fd)
 
     // write to the client
     ec_neg1(writen(fd, buf, BUFSIZE), free(buf); return -1;);
+    free(buf);
     return 0; // success
 }
 

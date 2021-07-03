@@ -1,5 +1,32 @@
-Fri Jul  2 21:11:24 2021-SERVER STARTUP
-Fri Jul  2 21:11:26 2021-CLIENT NEW: 9
-Fri Jul  2 21:11:26 2021-4__0__openFile(req->path, req->o_creat, req->o_lock, req->client, &evicted)__Success
-Fri Jul  2 21:11:26 2021-CLIENT LEFT: 9
-Fri Jul  2 21:11:33 2021-SERVER SHUTDOW
+Sat Jul  3 02:49:11 2021-SERVER STARTUP
+Sat Jul  3 02:49:14 2021-CLIENT NEW: 9
+Sat Jul  3 02:49:14 2021-3__0__openFile(req->path, req->o_creat, req->o_lock, req->client, &evicted)__Success
+Sat Jul  3 02:49:14 2021-3__0__appendToFile(req->path, req->append, req->appendLen, req->client, &evictedList, 0)__Success
+Sat Jul  3 02:49:14 2021-3__0__readFile(req->path, &evicted, req->client, 0)__Success
+Sat Jul  3 02:49:24 2021-CLIENT LEFT: 9
+Sat Jul  3 02:50:17 2021-SERVER SHUTDOW
+Sat Jul  3 02:50:20 2021-SERVER STARTUP
+Sat Jul  3 02:50:21 2021-CLIENT NEW: 9
+Sat Jul  3 02:50:21 2021-2__0__openFile(req->path, req->o_creat, req->o_lock, req->client, &evicted)__Success
+Sat Jul  3 02:50:21 2021-4__0__appendToFile(req->path, req->append, req->appendLen, req->client, &evictedList, 0)__Success
+Sat Jul  3 02:50:21 2021-4__0__readFile(req->path, &evicted, req->client, 0)__Success
+Sat Jul  3 02:50:24 2021-CLIENT LEFT: 9
+Sat Jul  3 02:51:14 2021-CLIENT NEW: 9
+Sat Jul  3 02:51:14 2021-4__1__openFile(req->path, req->o_creat, req->o_lock, req->client, &evicted)__Address already in use
+Sat Jul  3 02:51:14 2021-2__1__appendToFile(req->path, req->append, req->appendLen, req->client, &evictedList, 0)__Permission denied
+Sat Jul  3 02:51:14 2021-4__1__readFile(req->path, &evicted, req->client, 0)__Permission denied
+Sat Jul  3 02:51:16 2021-SERVER SHUTDOW
+Sat Jul  3 02:51:21 2021-SERVER STARTUP
+Sat Jul  3 02:51:21 2021-CLIENT NEW: 9
+Sat Jul  3 02:51:21 2021-4__0__openFile(req->path, req->o_creat, req->o_lock, req->client, &evicted)__Success
+Sat Jul  3 02:51:21 2021-4__0__appendToFile(req->path, req->append, req->appendLen, req->client, &evictedList, 0)__Success
+Sat Jul  3 02:51:21 2021-4__0__readFile(req->path, &evicted, req->client, 0)__Success
+Sat Jul  3 02:51:23 2021-CLIENT LEFT: 9
+Sat Jul  3 02:53:19 2021-SERVER SHUTDOW
+Sat Jul  3 02:53:22 2021-SERVER STARTUP
+Sat Jul  3 02:53:24 2021-CLIENT NEW: 9
+Sat Jul  3 02:53:24 2021-4__0__openFile(req->path, req->o_creat, req->o_lock, req->client, &evicted)__Success
+Sat Jul  3 02:53:24 2021-4__0__appendToFile(req->path, req->append, req->appendLen, req->client, &evictedList, 0)__Success
+Sat Jul  3 02:53:25 2021-4__0__readFile(req->path, &evicted, req->client, 0)__Success
+Sat Jul  3 02:53:27 2021-CLIENT LEFT: 9
+Sat Jul  3 02:53:30 2021-SERVER SHUTDOW

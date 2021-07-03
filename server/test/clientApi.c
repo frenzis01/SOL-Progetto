@@ -11,11 +11,13 @@ int main () {
     abstime.tv_sec = time(NULL) + 200;
     openConnection(SOCKNAME, 1000, abstime);
     openFile("fileTest",3);
-    // char buf[] = "Content test";
-    // appendToFile("fileTest",buf,strlen(buf) + 1, NULL);
-    // void *tmp;
-    // size_t size;
-    // readFile("fileTest",&tmp,&size);
-    // closeConnection(SOCKNAME);
+    char buf[] = "Content test";
+    appendToFile("fileTest",buf,strlen(buf), NULL);
+    void *tmp = NULL;
+    size_t size;
+    readFile("fileTest",&tmp,&size);
+    free(tmp);
+    sleep(2);
+    closeConnection(SOCKNAME);
     return 0;
 }

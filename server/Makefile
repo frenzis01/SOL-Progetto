@@ -32,8 +32,8 @@ bin/parser:	test/parser.c lib/libparser.so lib/libqueue.so
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lqueue -lparser
 
 bin/clientApi: test/clientApi.c lib/libclientApi.so $(INCDIR)/protocol.h
-	rm -r evicted
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lclientApi -lutils
+	rm -r evicted
 
 #shared libs
 lib/libqueue.so: lib/queue.o $(INCDIR)/queue.h

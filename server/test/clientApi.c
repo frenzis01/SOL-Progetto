@@ -25,6 +25,8 @@ int main () {
     unlockFile("/fileTest1");
     lockFile("/fileTest1");
     removeFile("/fileTest1");
+    openFile("/home/francis/Documenti/SOL/server/config.txt",3);
+    writeFile("/home/francis/Documenti/SOL/server/config.txt","evicted/dirWrite");
     readNFiles(-4,"evicted/dir2");
 
     free(tmp);

@@ -44,6 +44,7 @@ char *dirEvicted = NULL;
 
 evictedFile *readEvicted();
 void freeEvicted(void *arg);
+int storeFileInDir(evictedFile *f, const char *dirname);
 char *genRequest(size_t reqLen,
                  char op,
                  char flags,
@@ -221,6 +222,7 @@ int readNFiles(int N, const char *dirname)
         p(ec_neg1(printEvicted(fptr), freeEvicted(fptr); return -1));
 
         // TODO save in dirname
+        storeFileInDir(fptr,dirname);
 
         freeEvicted(fptr);
     }
@@ -461,12 +463,16 @@ int storeFileInDir(evictedFile *f, const char *dirname)
 {
     char
         *dir = NULL,
+        *fileName = NULL,
         *lastSlash = NULL,
-        command = NULL,
-        newPath = NULL;
+        *command = NULL,
+        *newDir = NULL,
+        *newPath = NULL;
     FILE *fptr = NULL;
     ec_z(dir = strndup(f->path, PATH_MAX), goto store_cleanup); // this includes the first '/'
     ec_z(lastSlash = strrchr(dir, '/'), goto store_cleanup);
+    ec_z(fileName = strndup(lastSlash + 1,PATH_MAX), goto store_cleanup);
+    *(lastSlash+1) = '\0';
     // if it is a valid path it has at least one '/'
 
     // _Bool haveToCreateDir = 1;
@@ -478,30 +484,49 @@ int storeFileInDir(evictedFile *f, const char *dirname)
     // CREATE DIRECTORY (along with parents)
     dir++; // remove the first slash
 
-    // get updated path
-    ec_z(newPath = calloc(strnlen(dir, PATH_MAX) +
-                              strnlen(dirname, PATH_MAX) + 1,
+    // get updated dir path
+    ec_z(newDir = calloc(strnlen(dir, PATH_MAX) +
+                              strnlen(dirname, PATH_MAX) + 2,
                           sizeof(char)),
          goto store_cleanup);
-    ec_z(snprintf(newPath, PATH_MAX, "%s%s", dir, dirname), goto store_cleanup);
+    ec_z(snprintf(newDir, PATH_MAX, "%s/%s", dirname, dir), goto store_cleanup);
 
     // create directory
     char sh_mkdir[] = "mkdir -p "; // -p makes parents, no error if existing
     ec_z(command = calloc(
-             strlen(sh_mkdir) + strnlen(newPath, PATH_MAX) + 1,
+             strlen(sh_mkdir) + strnlen(newDir, PATH_MAX) + 1,
              sizeof(char)),
          goto store_cleanup);
 
-    ec_neg(snprintf(command, strlen(sh_mkdir) + PATH_MAX, "%s%s", sh_mkdir, newPath), goto store_cleanup);
+    ec_neg(snprintf(command, strlen(sh_mkdir) + PATH_MAX, "%s%s", sh_mkdir, newDir), goto store_cleanup);
     ec_nz(system(command), goto store_cleanup);
 
 
+    //get updated path
+    ec_z(newPath = calloc (strnlen(newDir,PATH_MAX)+strnlen(fileName,PATH_MAX) + 2, sizeof(char)), goto store_cleanup);
+    ec_z(snprintf(newPath, PATH_MAX, "%s/%s", newDir, fileName), goto store_cleanup);
+    // puts(newPath);
+    
         // WRITE FILE
     ec_z(fptr = fopen(newPath,"w+"), goto store_cleanup);
+    ec_n(fwrite(f->content,sizeof(char),f->size,fptr),f->size, goto store_cleanup);
+    ec_n(fclose(fptr), 0, goto store_cleanup);
+    
+    free(--dir);
+    free(command);
+    free(newPath);
+    free(newDir);
+    free(fileName);
+    // free(fptr);
+    return 0;
 
 store_cleanup:
     free(dir);
     free(command);
     free(newPath);
+    free(newDir);
+    free(fileName);
+    free(fptr);
+    // TODO close(fptr) here?
     return -1;
 }

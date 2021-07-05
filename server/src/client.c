@@ -1,18 +1,5 @@
 #include <client.h>
 
-#include <utils.h>
-#include <parser.h>
-#include <clientApi.h>
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <errno.h>
-#include <time.h>
-#include <limits.h>
-#include <string.h>
-#include <sys/types.h>
-#include <dirent.h>
-
 #define FILESYS_err (errno == EACCES || errno == ENOENT || errno == EADDRINUSE || errno == EFBIG)
 #define ec_api(s)                          \
     do                                     \
@@ -44,16 +31,29 @@
         dirname = NULL; \
     } while (0);
 
+char *getAbsolutePath(char *path);
+int writeFilesList(queue *files, const char *dirname);
+int readFilesList(queue *files, const char *dirname);
+int removeFilesList(queue *files);
+int lockFilesList(queue *files, _Bool lock);
+int getFilesFromDir(const char *dirname, int n, queue **plist);
+
 int main(int argc, char **argv)
 {
     queue *options = NULL, *args = NULL;
     Option *op = NULL, *tmp = NULL;
     char *path = NULL;
     char *dirname = NULL;
+
     int t = 0;
+    struct timespec interval;
+    interval.tv_nsec = 0;
+    interval.tv_sec = 0;
+
     ec_neg1(parser(argc, argv, &options), goto cleanup);
     while (!queueIsEmpty(options))
     {
+        nanosleep(&interval, NULL);
         ec_z(op = queueDequeue(options), goto cleanup);
         switch (op->flag)
         {
@@ -61,11 +61,16 @@ int main(int argc, char **argv)
             printUsage(argv[0]);
             break;
         case 'f': // SOCKET CONN
+        {
             struct timespec expire;
             expire.tv_sec = time(NULL) + 60; // TODO auto-expire after a 60s?
-            ec_neg1(openConnection(op->arg, t, expire), goto cleanup);
+            printf("sock: %s", (char*)op->arg);
+            ec_neg1(openConnection((char*)op->arg, t, expire), goto cleanup);
+            free(op->arg);
             break;
+        }
         case 'w': // READS N FILES FROM DIR and SENDS THEM
+        {
             char *wDir = queueDequeue(op->arg);
             int *n = queueDequeue(op->arg);
             queueDestroy(op->arg);
@@ -74,30 +79,75 @@ int main(int argc, char **argv)
             ec_neg1(getFilesFromDir(wDir, *n, &args), goto cleanup);
             ec_neg1(writeFilesList(args, dirname), goto cleanup);
 
+            free(wDir);
+            free(n);
+
             CLEAN_DFLAG;
             break;
-        case 'W': // SENDS LIST OF FILES TO THE SERVER
+        }
+        case 'W': // SENDS F_LIST TO SERVER
             args = op->arg;
             GET_DFLAG;
-
             ec_neg1(writeFilesList(args, dirname), goto cleanup);
-
             CLEAN_DFLAG;
             break;
-        case 'r':
-
+        case 'r': // READS F_LIST FROM SERVER
+            GET_DFLAG;
+            readFilesList(op->arg, dirname);
+            CLEAN_DFLAG;
+            break;
+        case 'R': // READS N FILES FROM SERVER
+        {
+            int x = op->arg ? *(int *)op->arg : 0;
+            free(op->arg);
+            GET_DFLAG;
+            ec_api(readNFiles(x, dirname));
+            GET_DFLAG;
+            break;
+        }
+        case 't': // TIME TO ELAPSE BETWEEN REQUESTS
+            t = op->arg ? *(int *)op->arg : 0;
+            interval.tv_sec = t / 1000;
+            interval.tv_nsec = (t % 1000) * 1000000;
+            free(op->arg);
+            break;
+        case 'l': // ACQUIRES O_LOCK ON A F_LIST
+            lockFilesList(op->arg, 1);
+            break;
+        case 'u': // RELEASES O_LOCK ON A F_LIST
+            lockFilesList(op->arg, 0);
+            break;
+        case 'c': // REMOVES F_LIST FROM SERVER
+            removeFilesList(op->arg);
+            break;
+        case 'p': // ENABLES clientApi PRINTS
+            pFlag = 1;
+            break;
+        case 'E': // SETS DIR FOR F_EVICTED BY openFile OR removeFile
+            free(dirEvicted);
+            dirEvicted = op->arg ? op->arg : NULL;
+            break;
         default:;
         }
+        free(op);
         queueDestroy(args);
         free(path);
         args = NULL;
         path = NULL;
     }
 
+    queueDestroy(options);
+    free(dirEvicted);
+    free(dirname);
+    return 0;
+
 cleanup:
-    queueDestroy(op);
+    free(op);
+    queueDestroy(options);
     queueDestroy(args);
     free(path);
+    free(dirEvicted);
+    return -1;
 }
 
 /**
@@ -113,7 +163,7 @@ char *getAbsolutePath(char *path)
     ec_z(getcwd(cwd, sizeof(cwd)), free(path); return NULL);
     char *absPath = NULL;
     ec_z(absPath = malloc((strnlen(path, PATH_MAX) + strnlen(cwd, PATH_MAX)) * sizeof(char)),
-         return -1);
+         return NULL);
     strncat(absPath, cwd, PATH_MAX);
     strncat(absPath, path, PATH_MAX);
     return absPath;
@@ -136,7 +186,7 @@ int writeFilesList(queue *files, const char *dirname)
         // however, we can safely skip if, for some reason,
         // the queue contains a NULL string
         ec_z(buf = queueDequeue(files), continue);
-        ec_z(getAbsolutePath(buf), goto cleanup);
+        ec_z(path = getAbsolutePath(buf), goto cleanup);
         free(buf);
         buf = NULL;
 
@@ -152,13 +202,62 @@ int writeFilesList(queue *files, const char *dirname)
             if (res == SUCCESS)
             {
                 size_t size;
-                ec_neg1(readFromDisk(path, &buf, &size), goto cleanup); // 'recycle' buf
+                ec_neg1(readFromDisk(path, (void **)&buf, &size), goto cleanup); // 'recycle' buf
                 ec_api(appendToFile(path, buf, size, dirname));
                 free(buf);
                 buf = NULL;
             }
         }
         free(path);
+        path = NULL;
+    }
+    queueDestroy(files);
+    return 0;
+
+cleanup:
+    free(buf);
+    free(path);
+    return -1;
+}
+
+evictedFile *evictedWrap(char *path, char *content, size_t size)
+{
+    evictedFile *toRet;
+    ec_z(toRet = malloc(sizeof(evictedFile)), return NULL);
+    toRet->path = path;
+    toRet->content = content;
+    toRet->size = size;
+    return toRet;
+}
+
+/**
+ * Reads a list of files from the server and (if!=NULL) stores it in dirname.
+ * @param files paths' list
+ */
+int readFilesList(queue *files, const char *dirname)
+{
+    char *buf = NULL, *path = NULL;
+    int res = 0;
+    size_t size = 0;
+    while (!queueIsEmpty(files))
+    {
+        ec_z(buf = queueDequeue(files), continue);
+        ec_z(path = getAbsolutePath(buf), goto cleanup);
+        free(buf);
+        buf = NULL;
+
+        // TRY TO O_CREAT and O_LOCK THE FILE
+        ec_api(res = openFile(path, 0));
+        if (res == SUCCESS)
+        {
+            // The files will be saved on disk by readFile
+            ec_api(readFile(path, (void **)&buf, &size));
+            evictedFile *f = evictedWrap(path, buf, size);
+            if (dirname)
+                ec_neg1(storeFileInDir(f, dirname), goto cleanup);
+        }
+        free(path);
+        path = NULL;
     }
     queueDestroy(files);
     return 0;
@@ -170,45 +269,63 @@ cleanup:
 }
 
 /**
- * Reads a list of files from disk and sends it to server.
- * Tries to openFile with O_CREAT and O_LOCK first.
- * If it fails, it tries to openFile with no flags and then appendToFile.
+ * Tries to set or remove O_LOCK from a list of file
  * @param files paths' list
- * @param dirname if != NULL stores evicted files (if any) here 
+ * @param lock 1 => lockFile, 0 => unlockFile
  */
-int readFilesList(queue *files, const char *dirname)
+int removeFilesList(queue *files)
 {
     char *buf = NULL, *path = NULL;
-    int res = 0;
     while (!queueIsEmpty(files))
     {
-        // if the option was "-d file1,,file2" strtok should have skipped both ',';
-        // however, we can safely skip if, for some reason,
-        // the queue contains a NULL string
         ec_z(buf = queueDequeue(files), continue);
-        ec_z(getAbsolutePath(buf), goto cleanup);
+        ec_z(path = getAbsolutePath(buf), goto cleanup);
+        free(buf);
+        buf = NULL;
+
+        // if set, removed file will be store in dirEvicted
+        ec_api(lockFile(path)); // TODO ok?
+        ec_api(removeFile(path));
+
+        free(path);
+        path = NULL;
+    }
+    queueDestroy(files);
+    return 0;
+
+cleanup:
+    free(buf);
+    free(path);
+    return -1;
+}
+
+/**
+ * Tries to set or remove O_LOCK from a list of file
+ * @param files paths' list
+ * @param lock 1 => lockFile, 0 => unlockFile
+ */
+int lockFilesList(queue *files, _Bool lock)
+{
+    char *buf = NULL, *path = NULL;
+    while (!queueIsEmpty(files))
+    {
+        ec_z(buf = queueDequeue(files), continue);
+        ec_z(path = getAbsolutePath(buf), goto cleanup);
         free(buf);
         buf = NULL;
 
         // TRY TO O_CREAT and O_LOCK THE FILE
-        ec_api(res = openFile(path, _O_CREAT | _O_LOCK));
-        if (res == SUCCESS)
+        if (lock)
         {
-            ec_api(writeFile(path, dirname));
+            ec_api(lockFile(path));
         }
         else
         {
-            ec_api(res = openFile(path, 0));
-            if (res == SUCCESS)
-            {
-                size_t size;
-                ec_neg1(readFromDisk(path, &buf, &size), goto cleanup); // 'recycle' buf
-                ec_api(appendToFile(path, buf, size, dirname));
-                free(buf);
-                buf = NULL;
-            }
+            ec_api(unlockFile(path));
         }
+
         free(path);
+        path = NULL;
     }
     queueDestroy(files);
     return 0;
@@ -234,7 +351,7 @@ int getFilesFromDir(const char *dirname, int n, queue **plist)
     while (n-- && (file = readdir(dir)) != NULL)
     {
         ec_z(path = malloc((dirLen + strnlen(file->d_name, PATH_MAX) + 2) * sizeof(char)), goto cleanup);
-        ec_neg(snprintf(path, PATH_MAX, "%s/%s", dirname, file->d_name), path);
+        ec_neg(snprintf(path, PATH_MAX, "%s/%s", dirname, file->d_name), goto cleanup);
         ec_neg1(queueEnqueue(*plist, path), goto cleanup);
     }
     ec_neg1(closedir(dir), goto cleanup);

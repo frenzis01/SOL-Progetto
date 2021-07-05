@@ -5,6 +5,7 @@
 
 #include <protocol.h>
 #include <utils.h>
+#include <clientUtils.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,6 +18,8 @@
 #include <stdarg.h>
 #include <string.h>
 
+_Bool pFlag = 1;
+char *dirEvicted = NULL;
 
 int openConnection(const char* sockname, int msec,const struct timespec abstime);
 int closeConnection(const char* sockname);

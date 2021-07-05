@@ -17,6 +17,10 @@ bin/server: src/server.c lib/libserver.so $(INCDIR)/server.h
 	rm -f log.txt
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' $(LIBS)
 
+bin/client: src/client.c lib/libclientApi.so lib/libclientUtils.so lib/libutils.so lib/libparser.so lib/libqueue.so $(INCDIR)/client.h
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lclientApi -lutils -lclientUtils -lparser -lqueue
+	rm -r evicted 
+
 #My own tests
 bin/filesys: test/filesys.c lib/libfilesys.so lib/libqueue.so lib/libconn.so lib/liblogger.so lib/libicl_hash.so
 	#filesys
@@ -32,7 +36,7 @@ bin/parser:	test/parser.c lib/libparser.so lib/libqueue.so
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lqueue -lparser -lutils
 
 bin/clientApi: test/clientApi.c lib/libclientApi.so $(INCDIR)/protocol.h
-	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lclientApi -lutils
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lclientApi -lutils -lclientUtils
 	rm -r evicted
 
 #shared libs
@@ -62,8 +66,11 @@ lib/libserver.so: lib/server.o $(INCDIR)/server.h $(LIBS_SERVER_SO)
 lib/libparser.so: lib/parser.o lib/libqueue.so lib/libutils.so $(INCDIR)/parser.h
 	$(CC) -shared -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lqueue -lutils
 
-lib/libclientApi.so: lib/clientApi.o lib/libutils.so $(INCDIR)/clientApi.h
+lib/libclientUtils.so: lib/clientUtils.o lib/libutils.so $(INCDIR)/clientUtils.h
 	$(CC) -shared -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lutils
+
+lib/libclientApi.so: lib/clientApi.o lib/libutils.so lib/libclientUtils.so $(INCDIR)/clientApi.h
+	$(CC) -shared -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lutils -lclientUtils
 
 
 #generic stuff

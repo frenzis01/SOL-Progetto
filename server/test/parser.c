@@ -46,6 +46,7 @@ int main(int argc, char **argv)
             queueDestroy(curr->arg);
             break;
         case 'R': /* Reads n random files from the server (if n=0, reads every file) */
+        case 'E':
         case 't': /* Specifies the time between two consecutive requests to the server */
             if (curr->arg)
                 printf("%d", *(int *)(curr->arg));

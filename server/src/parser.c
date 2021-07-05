@@ -47,7 +47,7 @@ int parser(int argc, char **argv, queue **opList)
     ec_z(*opList = queueCreate(freeNothing, cmpFlagOption), free(op); return -1);
     /*parse command line*/
     int option = 0;
-    while ((option = getopt(argc, argv, "--f:W:D:r:l:u:c:d:hR::t::p::w:")) != -1)
+    while ((option = getopt(argc, argv, "--f:W:D:r:l:u:c:d:hR::t::p::w:E:")) != -1)
     {
         ec_z(op = malloc(sizeof(Option)), goto parser_cleanup);
         op->flag = option;
@@ -64,6 +64,7 @@ int parser(int argc, char **argv, queue **opList)
             CHK_MULT(f);
             ec_z(op->arg = malloc(strlen(optarg) + 1), goto parser_cleanup);
             strncpy(op->arg, optarg, strlen(optarg) + 1);
+            break;
         case 'd': /* Saves files read with -r or -R option in the specified dirname directory */
             CHK_PREV_R;
             ec_z(op->arg = malloc(strlen(optarg) + 1), goto parser_cleanup);
@@ -77,7 +78,6 @@ int parser(int argc, char **argv, queue **opList)
             ec_neg1(storeArgs((queue **)(&(op->arg)), optarg), goto parser_cleanup);
             break;
         case 'R': /* Reads n random files from the server (if n=0, reads every file) */
-            op->arg = NULL;
             if (optind < argc && argv[optind][0] != '-')
                 optarg = argv[optind];
             if (optarg) // if n is specified
@@ -119,7 +119,6 @@ int parser(int argc, char **argv, queue **opList)
             break;
         case 'p': /* Prints information about operation performed on the server */
             CHK_MULT(p);
-            ec_nz(queueEnqueue(*opList, op), goto parser_cleanup);
             break;
         case 'w': /* Sends to the server n files from the specified dirname directory. If n=0, sends every file in dirname */
         {
@@ -160,6 +159,17 @@ int parser(int argc, char **argv, queue **opList)
             ec_nz(queueEnqueue((queue *)(op->arg), n), goto parser_cleanup);
             // TODO item strtok ok? free?
             free(bkp);
+            break;
+        }
+        case 'E': /* Sets default dir for evicted files */
+        {
+            if (optind < argc && argv[optind][0] != '-')
+                optarg = argv[optind];
+            if (optarg)
+            {
+                ec_z(op->arg = malloc(strlen(optarg) + 1), goto parser_cleanup);
+                strncpy(op->arg, optarg, strlen(optarg) + 1);
+            }
             break;
         }
         case '?':

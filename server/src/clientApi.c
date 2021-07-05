@@ -12,39 +12,10 @@
         return -1;                                             \
     }
 
-typedef struct
-{
-    char
-        *path,
-        *content;
-    size_t pathLen, size;
-} evictedFile;
-
-int printString(const char *str, size_t len)
-{
-    for (size_t i = 0; i < len; i++)
-        ec_neg(printf("%c", str[i]), return -1);
-
-    return 0;
-}
-int printEvicted(void *arg)
-{
-    evictedFile *c = arg;
-    ec_neg(printf(ANSI_COLOR_MAGENTA "EVCTD -- PATH: %s | CONTENT: ", c->path), return -1);
-    ec_neg(printString(c->content, c->size), return -1);
-    ec_neg(printf(ANSI_COLOR_RESET "\n"), return -1);
-    errno = 0;
-    return 0;
-}
-
 char skname[PATH_MAX] = ""; // active connection
 int skfd = 0;
-_Bool pFlag = 1;
-char *dirEvicted = NULL;
 
 evictedFile *readEvicted();
-void freeEvicted(void *arg);
-int storeFileInDir(evictedFile *f, const char *dirname);
 int readFromDisk(const char *path, void **toRet, size_t *size);
 char *genRequest(size_t reqLen,
                  char op,
@@ -72,7 +43,7 @@ int openConnection(const char *sockname, int msec, const struct timespec abstime
     sa.sun_family = AF_UNIX;
     struct timespec interval;
     interval.tv_sec = msec / 1000;
-    interval.tv_nsec = 0;
+    interval.tv_nsec = (msec % 1000) * 1000000;
 
     ec_neg1(skfd = socket(AF_UNIX, SOCK_STREAM, 0), return -1);
 
@@ -107,7 +78,7 @@ int closeConnection(const char *sockname)
  */
 int openFile(const char *pathname, int flags)
 {
-    if ((flags < 0 || flags > 3) || !pathname || (strchr(pathname,'/') != pathname))
+    if ((flags < 0 || flags > 3) || !pathname || (strchr(pathname, '/') != pathname))
     {
         p(puts("Invalid argument"))
             errno = EINVAL;
@@ -154,7 +125,7 @@ int openFile(const char *pathname, int flags)
  */
 int readFile(const char *pathname, void **buf, size_t *size)
 {
-    if (!pathname || (strchr(pathname,'/') != pathname))
+    if (!pathname || (strchr(pathname, '/') != pathname))
     {
         p(puts("Invalid argument"))
             errno = EINVAL;
@@ -240,7 +211,7 @@ int readNFiles(int N, const char *dirname)
  */
 int writeFile(const char *pathname, const char *dirname)
 {
-    if (!pathname || (strchr(pathname,'/') != pathname))
+    if (!pathname || (strchr(pathname, '/') != pathname))
     {
         p(puts("Invalid argument"))
             errno = EINVAL;
@@ -296,7 +267,7 @@ int writeFile(const char *pathname, const char *dirname)
  */
 int appendToFile(const char *pathname, void *buf, size_t size, const char *dirname)
 {
-    if (!pathname || !buf || (strchr(pathname,'/') != pathname))
+    if (!pathname || !buf || (strchr(pathname, '/') != pathname))
     {
         p(puts("Invalid argument"))
             errno = EINVAL;
@@ -343,7 +314,7 @@ int appendToFile(const char *pathname, void *buf, size_t size, const char *dirna
  */
 int lockFile(const char *pathname)
 {
-    if (!pathname || (strchr(pathname,'/') != pathname))
+    if (!pathname || (strchr(pathname, '/') != pathname))
     {
         p(puts("Invalid argument"))
             errno = EINVAL;
@@ -374,7 +345,7 @@ int lockFile(const char *pathname)
  */
 int unlockFile(const char *pathname)
 {
-    if (!pathname || (strchr(pathname,'/') != pathname))
+    if (!pathname || (strchr(pathname, '/') != pathname))
     {
         p(puts("Invalid argument"))
             errno = EINVAL;
@@ -404,7 +375,7 @@ int unlockFile(const char *pathname)
  */
 int closeFile(const char *pathname)
 {
-    if (!pathname || (strchr(pathname,'/') != pathname))
+    if (!pathname || (strchr(pathname, '/') != pathname))
     {
         p(puts("Invalid argument"))
             errno = EINVAL;
@@ -434,7 +405,7 @@ int closeFile(const char *pathname)
  */
 int removeFile(const char *pathname)
 {
-    if (!pathname || (strchr(pathname,'/') != pathname))
+    if (!pathname || (strchr(pathname, '/') != pathname))
     {
         p(puts("Invalid argument"))
             errno = EINVAL;
@@ -515,86 +486,12 @@ evictedFile *readEvicted()
     ec_z(f = malloc(sizeof(evictedFile)), return NULL);
     f->path = NULL;
     f->content = NULL;
-    ec_n(readn(skfd, &f->pathLen, sizeof(size_t)), sizeof(size_t), freeEvicted(f); return NULL);
-    ec_z(f->path = calloc(f->pathLen + 1, sizeof(char)), freeEvicted(f); return NULL);
-    ec_n(readn(skfd, f->path, f->pathLen), f->pathLen, freeEvicted(f); return NULL);
+    size_t pathLen;
+    ec_n(readn(skfd, &pathLen, sizeof(size_t)), sizeof(size_t), freeEvicted(f); return NULL);
+    ec_z(f->path = calloc(pathLen + 1, sizeof(char)), freeEvicted(f); return NULL);
+    ec_n(readn(skfd, f->path, pathLen), pathLen, freeEvicted(f); return NULL);
     ec_n(readn(skfd, &f->size, sizeof(size_t)), sizeof(size_t), freeEvicted(f); return NULL);
     ec_z(f->content = calloc(f->size, sizeof(char)), freeEvicted(f); return NULL);
     ec_n(readn(skfd, f->content, f->size), f->size, freeEvicted(f); return NULL);
     return f;
-}
-
-void freeEvicted(void *arg)
-{
-    evictedFile *f = arg;
-    free(f->content);
-    free(f->path);
-    free(f);
-}
-
-/**
- * Assumes f->path is absolute. \n \n
- * Given a file's path "fileDir/fileName", stores it in "dirname/fileDir/fileName". \n \n
- * Creates all the needed parent directories. Overwrites file if already existing.
- * @returns 0 success, -1 error
- */
-int storeFileInDir(evictedFile *f, const char *dirname)
-{
-    char
-        *fileName = NULL,
-        *lastSlash = NULL,
-        *command = NULL,
-        *newPath = NULL,
-        firstFileNameChar;
-    FILE *fptr = NULL;
-
-    // CHECK: if it is a valid absolute path it must start with '/'
-    ec_n(strchr(f->path, '/'), f->path, errno = EINVAL; goto store_cleanup);
-
-    // We need to get a string "dirname/fileDir/"
-
-    ec_z(newPath = calloc(strnlen(f->path, PATH_MAX) +
-                              strnlen(dirname, PATH_MAX) + 1,
-                          sizeof(char)),
-         goto store_cleanup);
-    ec_z(snprintf(newPath, PATH_MAX, "%s%s", dirname, f->path), goto store_cleanup);
-
-    // newPath now looks like "dirname/filedir/filepath"
-    ec_z(lastSlash = strrchr(newPath, '/'), goto store_cleanup);
-    firstFileNameChar = *(lastSlash + 1); // backup this character
-    *(lastSlash + 1) = '\0';              // truncate fileName
-    // newPath now looks like "dirname/fileDir/"
-
-    // create directory + parents
-    char sh_mkdir[] = "mkdir -p "; // -p makes parents, no error if existing
-    ec_z(command = calloc(
-             strlen(sh_mkdir) + strnlen(newPath, PATH_MAX) + 1,
-             sizeof(char)),
-         goto store_cleanup);
-
-    ec_neg(snprintf(command, strlen(sh_mkdir) + PATH_MAX, "%s%s", sh_mkdir, newPath), goto store_cleanup);
-    ec_nz(system(command), goto store_cleanup);
-
-    // Directories created,
-    // now to open the file we need the entire path back
-    *(newPath + strnlen(newPath, PATH_MAX)) = firstFileNameChar; // eliminate null character to get entire string again
-
-    // WRITE FILE
-    ec_z(fptr = fopen(newPath, "w+"), goto store_cleanup);
-    ec_n(fwrite(f->content, sizeof(char), f->size, fptr), f->size, goto store_cleanup);
-    ec_n(fclose(fptr), 0, goto store_cleanup);
-    fptr = NULL;
-
-    free(command);
-    free(newPath);
-    free(fileName);
-    return 0;
-
-store_cleanup:
-    free(command);
-    free(newPath);
-    free(fileName);
-    if (fptr)
-        fclose(fptr);
-    return -1;
 }

@@ -187,3 +187,64 @@ int isInteger(const char* s, int* n){
     // non è un numero
     return 0;
 }
+
+/**
+ * Checks if 's' is a long and stores the corresponding value in 'n'
+ * @param n where the result will be stored
+ * @returns 1 success, 0 's' not an integer
+ */
+int isLong(const char* s, long* n){
+    char *e = NULL;
+    errno = 0;
+    long val = strtol(s, &e, 10);
+
+    if (val == LONG_MAX || val == LONG_MIN ){
+        // overflow/underflow
+        return 0;
+    }
+
+    if (e != NULL && e != s){
+        *n = val;
+        // è un numero valido
+        return 1;
+    }
+
+    // non è un numero
+    return 0;
+}
+
+/**
+ * Reads an entire file from disk and stores its content in *toRet and 
+ * its size in *size.
+ * @returns 0 success, -1 error
+ */
+int readFromDisk(const char *path, void **toRet, size_t *size)
+{
+    if (!path || !toRet || !size)
+    {
+        errno = EINVAL;
+        return -1;
+    }
+    FILE *fptr = NULL;
+    *toRet = NULL;
+    // OPEN FILE and get SIZE
+    ec_z(fptr = fopen(path, "r"), return -1);
+    ec_neg1(fseek(fptr, 0L, SEEK_END), goto read_cleanup);
+    *size = ftell(fptr);
+    rewind(fptr); // Back to the beginning to read later
+
+    // ALLOCATE BUF
+    ec_z(*toRet = malloc(*size * 1), goto read_cleanup);
+
+    // READ
+    ec_n(fread(*toRet, 1, *size, fptr), *size, goto read_cleanup);
+
+    ec_n(fclose(fptr), 0, goto read_cleanup);
+    return 0;
+
+read_cleanup:
+    free(*toRet);
+    if (fptr)
+        fclose(fptr);
+    return -1;
+}

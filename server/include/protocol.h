@@ -44,8 +44,8 @@
 #define MSGLEN_DIM 10
 
 #define NO_FLAGS 0
-#define ONLY_CREAT 1
-#define ONLY_LOCK 2
+#define _O_CREAT 1
+#define _O_LOCK 2
 #define BOTH_FLAGS 3
 
 #define NUM_LEN 10

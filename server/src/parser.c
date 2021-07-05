@@ -9,6 +9,28 @@
         return -1;                                                                             \
     }
 
+#define CHK_PREV_W                                                                                      \
+    do                                                                                                  \
+    {                                                                                                   \
+        if (!(*opList)->tail || (((Option *)((*opList)->tail->data))->flag != 'w' &&                    \
+                                 ((Option *)((*opList)->tail->data))->flag != 'W'))                     \
+        {                                                                                               \
+            puts(ANSI_COLOR_RED "Option -D requires -W or -w as precedent option.\n" ANSI_COLOR_RESET); \
+            continue;                                                                                   \
+        }                                                                                               \
+    } while (0);
+
+#define CHK_PREV_R                                                                                      \
+    do                                                                                                  \
+    {                                                                                                   \
+        if (!(*opList)->tail || (((Option *)((*opList)->tail->data))->flag != 'r' &&                    \
+                                 ((Option *)((*opList)->tail->data))->flag != 'R'))                     \
+        {                                                                                               \
+            puts(ANSI_COLOR_RED "Option -D requires -W or -w as precedent option.\n" ANSI_COLOR_RESET); \
+            continue;                                                                                   \
+        }                                                                                               \
+    } while (0);
+
 int storeArgs(queue **res, char *args);
 
 /**
@@ -33,10 +55,17 @@ int parser(int argc, char **argv, queue **opList)
 
         switch (option)
         {
+        case 'D': /*If capacity misses occur on the server, save the files it gets to us in the specified dirname directory*/
+            CHK_PREV_W;
+            ec_z(op->arg = malloc(strlen(optarg) + 1), goto parser_cleanup);
+            strncpy(op->arg, optarg, strlen(optarg) + 1);
+            break;
         case 'f': /*Sets the socket file path up to the specified socketPath*/
             CHK_MULT(f);
-        case 'D': /*If capacity misses occur on the server, save the files it gets to us in the specified dirname directory*/
+            ec_z(op->arg = malloc(strlen(optarg) + 1), goto parser_cleanup);
+            strncpy(op->arg, optarg, strlen(optarg) + 1);
         case 'd': /* Saves files read with -r or -R option in the specified dirname directory */
+            CHK_PREV_R;
             ec_z(op->arg = malloc(strlen(optarg) + 1), goto parser_cleanup);
             strncpy(op->arg, optarg, strlen(optarg) + 1);
             break;
@@ -194,7 +223,6 @@ int storeArgs(queue **res, char *args)
          *bkp = NULL,
          *newArg = NULL;
 
-    
     ec_z(*res = queueCreate(free, cmpString), return -1);
 
     ec_z(bkp = malloc(strlen(args) + 1), goto storeArgs_cleanup);

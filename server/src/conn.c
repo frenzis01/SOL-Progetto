@@ -92,10 +92,10 @@ void setFlags(Request *req, int flags)
     req->o_lock = 0;
     switch (flags)
     {
-    case ONLY_CREAT:
+    case _O_CREAT:
         req->o_creat = 1;
         break;
-    case ONLY_LOCK:
+    case _O_LOCK:
         req->o_lock = 1;
         break;
     case BOTH_FLAGS:

@@ -28,8 +28,8 @@ bin/mt_filesys: test/mt_filesys.c lib/libfilesys.so lib/libqueue.so lib/libconn.
 	rm -f log.txt
 	$(CC) $(CFLAGS) -fno-stack-protector $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lfilesys -lqueue -lconn -llogger -licl_hash -lpthread
 
-bin/parser:	test/parser.c lib/libparser.so lib/libqueue.so
-	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lqueue -lparser
+bin/parser:	test/parser.c lib/libparser.so lib/libqueue.so 
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lqueue -lparser -lutils
 
 bin/clientApi: test/clientApi.c lib/libclientApi.so $(INCDIR)/protocol.h
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lclientApi -lutils

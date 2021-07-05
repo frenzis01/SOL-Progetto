@@ -137,4 +137,8 @@ int max(int args, ...);
 
 int isInteger(const char *s, int *n);
 
+int isLong(const char* s, long* n);
+
+int readFromDisk(const char *path, void **toRet, size_t *size);
+
 #endif

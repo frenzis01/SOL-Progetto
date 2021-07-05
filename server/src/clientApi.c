@@ -37,7 +37,7 @@ int printEvicted(void *arg)
     return 0;
 }
 
-char skname[UNIX_PATH_MAX] = ""; // active connection
+char skname[PATH_MAX] = ""; // active connection
 int skfd = 0;
 _Bool pFlag = 1;
 char *dirEvicted = NULL;
@@ -289,6 +289,7 @@ int writeFile(const char *pathname, const char *dirname)
 }
 
 /**
+ * Note: doesn't free buf
  * @param buf content to append
  * @param size buf's size
  * @param dirname if != NULL, store evicted files here, if any
@@ -593,37 +594,6 @@ store_cleanup:
     free(command);
     free(newPath);
     free(fileName);
-    if (fptr)
-        fclose(fptr);
-    return -1;
-}
-
-int readFromDisk(const char *path, void **toRet, size_t *size)
-{
-    if (!path || !toRet || !size)
-    {
-        errno = EINVAL;
-        return -1;
-    }
-    FILE *fptr = NULL;
-    *toRet = NULL;
-    // OPEN FILE and get SIZE
-    ec_z(fptr = fopen(path, "r"), return -1);
-    ec_neg1(fseek(fptr, 0L, SEEK_END), goto read_cleanup);
-    *size = ftell(fptr);
-    rewind(fptr); // Back to the beginning to read later
-
-    // ALLOCATE BUF
-    ec_z(*toRet = malloc(*size * 1), goto read_cleanup);
-
-    // READ
-    ec_n(fread(*toRet, 1, *size, fptr), *size, goto read_cleanup);
-
-    ec_n(fclose(fptr), 0, goto read_cleanup);
-    return 0;
-
-read_cleanup:
-    free(*toRet);
     if (fptr)
         fclose(fptr);
     return -1;

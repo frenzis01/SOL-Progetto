@@ -1,7 +1,7 @@
 #ifndef SERVER_H
 #define SERVER_H
 
-// #define _GNU_SOURCE // TODO chk per strerror
+// #define _GNU_SOURCE
 // #define _POSIX_C_SOURCE 200112L
 #define _POSIX_C_SOURCE 200809L
 #include <sys/syscall.h>
@@ -46,10 +46,6 @@ typedef struct
     size_t evictPolicy;
     char *sockname;
 
-    // stats
-    // size_t maxSimultaneousConnections;
-    // size_t maxFilesInStorage;
-    // size_t maxSizeReached;
 } ServerData;
 
 

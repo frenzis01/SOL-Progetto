@@ -20,8 +20,18 @@
 #define ANSI_COLOR_YELLOW "\x1b[33m"
 #define ANSI_COLOR_BLUE "\x1b[34m"
 #define ANSI_COLOR_MAGENTA "\x1b[35m"
+// #define ANSI_COLOR_MAGENTA "\033[1;35m"
 #define ANSI_COLOR_CYAN "\x1b[36m"
 #define ANSI_COLOR_RESET "\x1b[0m"
+
+#define BBLK "\033[1;30m"
+#define BRED "\033[1;31m"
+#define BGRN "\033[1;32m"
+#define BYEL "\033[1;33m"
+#define BBLU "\033[1;34m"
+#define BMAG "\033[1;35m"
+#define BCYN "\033[1;36m"
+#define BWHT "\033[1;37m"
 
 #define ec(s, r, c)     \
     do                  \

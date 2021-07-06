@@ -96,9 +96,13 @@ void removeSocket()
     free(sockName);
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
-
+    if (argc == 1){
+        puts(BRED "No config.txt path specified. Exiting..." BWHT);
+        exit(EXIT_FAILURE);
+    }
+    char *config = argv[1];
     // Signal handler setup
     myShutdown = 0;
     ec_neg1(pipe(sigPipe), exit(EXIT_FAILURE));
@@ -112,7 +116,7 @@ int main(void)
 
     // Server initialization
     ServerData meta;
-    ec_neg1(readConfig(CONFIG_PATH, &meta), exit(EXIT_FAILURE));
+    ec_neg1(readConfig(config, &meta), exit(EXIT_FAILURE));
     ec_neg1(storeInit(meta.nfiles, meta.capacity, meta.evictPolicy), exit(EXIT_FAILURE));
     ec_nz(pthread_mutex_init(&lockClients,NULL), exit(EXIT_FAILURE));
     ec_z(clients = icl_hash_create(H_BUCKETS, NULL, NULL), exit(EXIT_FAILURE));

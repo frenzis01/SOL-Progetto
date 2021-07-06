@@ -38,7 +38,7 @@ int parser(int argc, char **argv, queue **opList)
 {
     queue *opQ = *opList;
     Option *op = NULL;
-    ec_z(*opList = queueCreate(freeNothing, cmpFlagOption), free(op); return -1);
+    ec_z(*opList = queueCreate(freeSimpleOption, cmpFlagOption), free(op); return -1);
     /*parse command line*/
     int option = 0;
     while ((option = getopt(argc, argv, "--f:W:D:r:l:u:c:d:hR::t::p::w:E:")) != -1)
@@ -135,7 +135,7 @@ int parser(int argc, char **argv, queue **opList)
                 strncpy(dir, item, strlen(item) + 1);
                 ec_nz(queueEnqueue((queue *)(op->arg), dir), goto parser_cleanup);
                 // n
-                item = strtok_r(NULL, ",", &save);
+                item = strtok_r(NULL, "n=", &save);
             }
             if (item)
             {
@@ -252,6 +252,9 @@ storeArgs_cleanup:
     return -1;
 }
 
+
+
+// TODO "  -E,\tSets the default eviction dir. If no dir is specified removes the current default dir"
 /**
  * Print the usage of this program
  * @param exe: the name of the executable
@@ -263,6 +266,7 @@ void printUsage(char *exe)
            "[-t [0]] [-R [n=0]] [-Wrluc file1 [,file2,file3 ...]]\n"
            "Options:\n"
            "  -h,\tPrints this message\n"
+           "  -E,\tSets the dir for openFile and removeFile eviction. If no dir is specified removes the current dir"
            "  -f,\tSets the socket file path up to the specified socketPath\n"
            "  -w,\tSends to the server n files from the specified dirname directory. If n=0, sends every file in dirname\n"
            "  -W,\tSends to the server the specified files\n"

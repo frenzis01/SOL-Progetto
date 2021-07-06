@@ -44,8 +44,9 @@ int main(int argc, char **argv)
 {
     queue *options = NULL, *args = NULL;
     Option *op = NULL, *tmp = NULL;
-    char *path = NULL;
-    char *dirname = NULL;
+    char *path = NULL,
+         *dirname = NULL,
+         sockname[PATH_MAX];
 
     int t = 0;
 
@@ -66,7 +67,8 @@ int main(int argc, char **argv)
             struct timespec expire;
             expire.tv_sec = time(NULL) + 60;
             // TODO OK? auto-expire after a 60s and 100ms if 0 to avoid flooding?
-            ec_neg1(openConnection((char *)op->arg, t ? t : 100, expire), goto cleanup);
+            strncpy(sockname, op->arg, PATH_MAX);
+            ec_neg1(openConnection(sockname, t ? t : 100, expire), goto cleanup);
             free(op->arg);
             break;
         }
@@ -89,9 +91,8 @@ int main(int argc, char **argv)
             break;
         }
         case 'W': // SENDS F_LIST TO SERVER
-            args = op->arg;
             GET_DFLAG;
-            ec_neg1(writeFilesList(args, dirname), goto cleanup);
+            ec_neg1(writeFilesList(op->arg, dirname), goto cleanup);
             CLEAN_DFLAG;
             break;
         case 'r': // READS F_LIST FROM SERVER
@@ -139,6 +140,7 @@ int main(int argc, char **argv)
         path = NULL;
     }
 
+    closeConnection(sockname);
     queueDestroy(options);
     free(dirEvicted);
     free(dirname);
@@ -243,6 +245,7 @@ int readFilesList(queue *files, const char *dirname)
     char *buf = NULL, *path = NULL;
     int res = 0;
     size_t size = 0;
+    evictedFile *f;
     while (!queueIsEmpty(files))
     {
         ec_z(buf = queueDequeue(files), continue);
@@ -256,19 +259,32 @@ int readFilesList(queue *files, const char *dirname)
         {
             // The files will be saved on disk by readFile
             ec_api(readFile(path, (void **)&buf, &size));
-            evictedFile *f = evictedWrap(path, buf, size);
             if (dirname)
+            {
+                f = evictedWrap(path, buf, size);
                 ec_neg1(storeFileInDir(f, dirname), goto cleanup);
+                // freeEvicted(f);
+                free(path);
+                free(buf);
+                free(f);
+                path = NULL;
+                buf= NULL;
+                f = NULL;
+            }
         }
-        free(path);
-        path = NULL;
+        else
+        {
+            free(path);
+            path = NULL;
+        }
     }
     queueDestroy(files);
     return 0;
 
 cleanup:
-    free(buf);
-    free(path);
+    freeEvicted(f);
+    // free(buf);
+    // free(path);
     return -1;
 }
 
@@ -298,6 +314,7 @@ int removeFilesList(queue *files)
     return 0;
 
 cleanup:
+    queueDestroy(files);
     free(buf);
     free(path);
     return -1;
@@ -340,19 +357,27 @@ cleanup:
     return -1;
 }
 
-int specialDir(const char *path)
-{
-    char *fname = strrchr(path, '/');
-    if (!strncmp(fname, "/..", PATH_MAX) || !strncmp(fname, "/.", PATH_MAX))
-        return 1;
-    return 0;
-}
+// int specialDir(const char *path)
+// {
+//     char *fname = strrchr(path, '/');
+//     if (!strncmp(fname, "/..", PATH_MAX) || !strncmp(fname, "/.", PATH_MAX))
+//         return 1;
+//     return 0;
+// }
 
-int specialFile(const char *name)
+int specialDir(const char *name)
 {
     if (!strncmp(name, "..", PATH_MAX) || !strncmp(name, ".", PATH_MAX))
         return 1;
     return 0;
+}
+
+char *catPaths(const char *p1, const char *p2)
+{
+    char *path;
+    ec_z(path = malloc((strnlen(p1, PATH_MAX) + strnlen(p2, PATH_MAX) + 2) * sizeof(char)), return NULL);
+    ec_neg(snprintf(path, PATH_MAX, "%s/%s", p1, p2), free(path); return NULL);
+    return path;
 }
 
 /**
@@ -366,23 +391,54 @@ int getFilesFromDir(const char *dirname, int n, queue **plist)
     ec_z(*plist = queueCreate(free, NULL), return -1);
     ec_z(dir = opendir(dirname), goto cleanup;);
     struct dirent *file;
-    size_t dirLen = strnlen(dirname, PATH_MAX);
+    // size_t dirLen = strnlen(dirname, PATH_MAX);
     _Bool all = (n > 0) ? 0 : 1;
+
+    queue *subDir = NULL;
+    char *curr = NULL;
     while ((all || n--) && (file = readdir(dir)) != NULL)
     {
-        if (specialFile(file->d_name))
+        struct stat s;
+        ec_z(path = catPaths(dirname, file->d_name), goto cleanup);
+        ec_neg1(stat(path, &s), goto cleanup);
+
+        if ((!S_ISDIR(s.st_mode) && !S_ISREG(s.st_mode)) || specialDir(file->d_name))
+        {
+            free(path);
             continue;
-        ec_z(path = malloc((dirLen + strnlen(file->d_name, PATH_MAX) + 2) * sizeof(char)), goto cleanup);
-        ec_neg(snprintf(path, PATH_MAX, "%s/%s", dirname, file->d_name), goto cleanup);
-        ec_neg1(queueEnqueue(*plist, path), goto cleanup);
+        }
+        if (S_ISDIR(s.st_mode))
+        {
+            ec_neg1(getFilesFromDir(path, n, &subDir), goto cleanup);
+            free(path);
+            curr = queueDequeue(subDir);
+            while (curr)
+            {
+                ec_neg1(queueEnqueue(*plist, curr), goto cleanup);
+                curr = queueDequeue(subDir);
+            }
+            queueDestroy(subDir);
+            subDir = NULL;
+            curr = NULL;
+        }
+        else
+        {
+            // ec_z(path = malloc((dirLen + strnlen(file->d_name, PATH_MAX) + 2) * sizeof(char)), goto cleanup);
+            // ec_neg(snprintf(path, PATH_MAX, "%s/%s", dirname, file->d_name), goto cleanup);
+            // ec_z(path = catPaths(dirname, file->d_name), goto cleanup);
+            ec_neg1(queueEnqueue(*plist, path), goto cleanup);
+        }
     }
     ec_neg1(closedir(dir), goto cleanup);
 
     return 0;
 
 cleanup:
+    queueDestroy(subDir);
+    free(curr);
     free(path);
     queueDestroy(*plist);
+    *plist = NULL;
     if (dir)
         closedir(dir);
     return -1;

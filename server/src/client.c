@@ -1,14 +1,14 @@
 #include <client.h>
 
-#define FILESYS_err (errno == EACCES || errno == ENOENT || errno == EADDRINUSE || errno == EFBIG)
-#define ec_api(s)                          \
-    do                                     \
-    {                                      \
-        if ((s) == (-1) && !(FILESYS_err)) \
-        {                                  \
-            perror(#s);                    \
-            goto cleanup;                  \
-        }                                  \
+#define FILESYS_err (errno == EACCES || errno == ENOENT || errno == EADDRINUSE || errno == EFBIG || errno == EINVAL)
+#define ec_api(s)                                                                  \
+    do                                                                             \
+    {                                                                              \
+        if (nanosleep(&interval, NULL) == (-1) || ((s) == (-1) && !(FILESYS_err))) \
+        {                                                                          \
+            perror(#s);                                                            \
+            goto cleanup;                                                          \
+        }                                                                          \
     } while (0);
 
 #define GET_DFLAG                                                               \
@@ -38,6 +38,8 @@ int removeFilesList(queue *files);
 int lockFilesList(queue *files, _Bool lock);
 int getFilesFromDir(const char *dirname, int n, queue **plist);
 
+struct timespec interval;
+
 int main(int argc, char **argv)
 {
     queue *options = NULL, *args = NULL;
@@ -46,14 +48,13 @@ int main(int argc, char **argv)
     char *dirname = NULL;
 
     int t = 0;
-    struct timespec interval;
+
     interval.tv_nsec = 0;
     interval.tv_sec = 0;
 
     ec_neg1(parser(argc, argv, &options), goto cleanup);
     while (!queueIsEmpty(options))
     {
-        nanosleep(&interval, NULL);
         ec_z(op = queueDequeue(options), goto cleanup);
         switch (op->flag)
         {
@@ -63,9 +64,9 @@ int main(int argc, char **argv)
         case 'f': // SOCKET CONN
         {
             struct timespec expire;
-            expire.tv_sec = time(NULL) + 60; 
+            expire.tv_sec = time(NULL) + 60;
             // TODO OK? auto-expire after a 60s and 100ms if 0 to avoid flooding?
-            ec_neg1(openConnection((char*)op->arg, t ? t : 100, expire), goto cleanup);
+            ec_neg1(openConnection((char *)op->arg, t ? t : 100, expire), goto cleanup);
             free(op->arg);
             break;
         }
@@ -168,7 +169,7 @@ char *getAbsolutePath(char *path)
          return NULL);
     // strncat(absPath, cwd, PATH_MAX);
     // strncat(absPath+strnlen(absPath,PATH_MAX), path, PATH_MAX);
-    ec_neg(snprintf(absPath, PATH_MAX,"%s/%s",cwd,path), return NULL);
+    ec_neg(snprintf(absPath, PATH_MAX, "%s/%s", cwd, path), return NULL);
     return absPath;
 }
 
@@ -339,14 +340,18 @@ cleanup:
     return -1;
 }
 
-int specialDir (const char *path) {
-    char *fname = strrchr(path,'/');
-    if (!strncmp(fname,"/..", PATH_MAX) || !strncmp(fname,"/.", PATH_MAX)) return 1;
+int specialDir(const char *path)
+{
+    char *fname = strrchr(path, '/');
+    if (!strncmp(fname, "/..", PATH_MAX) || !strncmp(fname, "/.", PATH_MAX))
+        return 1;
     return 0;
 }
 
-int specialFile (const char *name) {
-    if (!strncmp(name,"..", PATH_MAX) || !strncmp(name,".", PATH_MAX)) return 1;
+int specialFile(const char *name)
+{
+    if (!strncmp(name, "..", PATH_MAX) || !strncmp(name, ".", PATH_MAX))
+        return 1;
     return 0;
 }
 
@@ -365,7 +370,8 @@ int getFilesFromDir(const char *dirname, int n, queue **plist)
     _Bool all = (n > 0) ? 0 : 1;
     while ((all || n--) && (file = readdir(dir)) != NULL)
     {
-        if (specialFile(file->d_name)) continue;
+        if (specialFile(file->d_name))
+            continue;
         ec_z(path = malloc((dirLen + strnlen(file->d_name, PATH_MAX) + 2) * sizeof(char)), goto cleanup);
         ec_neg(snprintf(path, PATH_MAX, "%s/%s", dirname, file->d_name), goto cleanup);
         ec_neg1(queueEnqueue(*plist, path), goto cleanup);

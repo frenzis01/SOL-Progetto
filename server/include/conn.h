@@ -13,6 +13,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <pthread.h>
+
 typedef struct {
     int fd;
     // queue *opened;
@@ -34,10 +36,15 @@ typedef struct {
     Client *client;
 } Request;
 
+
+#define UNLOCKCLIENTS pthread_mutex_unlock(&lockClients)
+#define LOCKCLIENTS pthread_mutex_lock(&lockClients)
+
 icl_hash_t *clients;
+pthread_mutex_t lockClients;
 
 
-Request *getRequest(int fd,  int *msg);
+Request *getRequest(int fd);
 
 sigset_t initSigMask();
 

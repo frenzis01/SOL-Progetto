@@ -80,7 +80,7 @@ int openFile(const char *pathname, int flags)
 {
     if ((flags < 0 || flags > 3) || !pathname || (strchr(pathname, '/') != pathname))
     {
-        p(puts("Invalid argument"))
+        p(puts(ANSI_COLOR_RED "Invalid argument" ANSI_COLOR_RESET))
             errno = EINVAL;
         return -1;
     }
@@ -127,7 +127,7 @@ int readFile(const char *pathname, void **buf, size_t *size)
 {
     if (!pathname || (strchr(pathname, '/') != pathname))
     {
-        p(puts("Invalid argument"))
+        p(puts(ANSI_COLOR_RED "Invalid argument" ANSI_COLOR_RESET))
             errno = EINVAL;
         return -1;
     }
@@ -171,7 +171,7 @@ int readNFiles(int N, const char *dirname)
 {
     if (!dirname)
     {
-        p(puts("Invalid argument"))
+        p(puts(ANSI_COLOR_RED "Invalid argument" ANSI_COLOR_RESET))
             errno = EINVAL;
         return -1;
     }
@@ -213,7 +213,7 @@ int writeFile(const char *pathname, const char *dirname)
 {
     if (!pathname || (strchr(pathname, '/') != pathname))
     {
-        p(puts("Invalid argument"))
+        p(puts(ANSI_COLOR_RED "Invalid argument" ANSI_COLOR_RESET))
             errno = EINVAL;
         return -1;
     }
@@ -269,7 +269,7 @@ int appendToFile(const char *pathname, void *buf, size_t size, const char *dirna
 {
     if (!pathname || !buf || (strchr(pathname, '/') != pathname))
     {
-        p(puts("Invalid argument"))
+        p(puts(ANSI_COLOR_RED "Invalid argument" ANSI_COLOR_RESET))
             errno = EINVAL;
         return -1;
     }
@@ -316,7 +316,7 @@ int lockFile(const char *pathname)
 {
     if (!pathname || (strchr(pathname, '/') != pathname))
     {
-        p(puts("Invalid argument"))
+        p(puts(ANSI_COLOR_RED "Invalid argument" ANSI_COLOR_RESET))
             errno = EINVAL;
         return -1;
     }
@@ -347,7 +347,7 @@ int unlockFile(const char *pathname)
 {
     if (!pathname || (strchr(pathname, '/') != pathname))
     {
-        p(puts("Invalid argument"))
+        p(puts(ANSI_COLOR_RED "Invalid argument" ANSI_COLOR_RESET))
             errno = EINVAL;
         return -1;
     }
@@ -377,7 +377,7 @@ int closeFile(const char *pathname)
 {
     if (!pathname || (strchr(pathname, '/') != pathname))
     {
-        p(puts("Invalid argument"))
+        p(puts(ANSI_COLOR_RED "Invalid argument" ANSI_COLOR_RESET))
             errno = EINVAL;
         return -1;
     }
@@ -407,7 +407,7 @@ int removeFile(const char *pathname)
 {
     if (!pathname || (strchr(pathname, '/') != pathname))
     {
-        p(puts("Invalid argument"))
+        p(puts(ANSI_COLOR_RED "Invalid argument" ANSI_COLOR_RESET))
             errno = EINVAL;
         return -1;
     }

@@ -63,9 +63,9 @@ int main(int argc, char **argv)
         case 'f': // SOCKET CONN
         {
             struct timespec expire;
-            expire.tv_sec = time(NULL) + 60; // TODO auto-expire after a 60s?
-            printf("sock: %s", (char*)op->arg);
-            ec_neg1(openConnection((char*)op->arg, t, expire), goto cleanup);
+            expire.tv_sec = time(NULL) + 60; 
+            // TODO OK? auto-expire after a 60s and 100ms if 0 to avoid flooding?
+            ec_neg1(openConnection((char*)op->arg, t ? t : 100, expire), goto cleanup);
             free(op->arg);
             break;
         }
@@ -76,11 +76,13 @@ int main(int argc, char **argv)
             queueDestroy(op->arg);
             GET_DFLAG;
 
-            ec_neg1(getFilesFromDir(wDir, *n, &args), goto cleanup);
+            int x = n ? *n : 0;
+            free(n);
+            ec_neg1(getFilesFromDir(wDir, x, &args), goto cleanup);
             ec_neg1(writeFilesList(args, dirname), goto cleanup);
 
             free(wDir);
-            free(n);
+            args = NULL;
 
             CLEAN_DFLAG;
             break;
@@ -162,10 +164,11 @@ char *getAbsolutePath(char *path)
     char cwd[PATH_MAX];
     ec_z(getcwd(cwd, sizeof(cwd)), free(path); return NULL);
     char *absPath = NULL;
-    ec_z(absPath = malloc((strnlen(path, PATH_MAX) + strnlen(cwd, PATH_MAX)) * sizeof(char)),
+    ec_z(absPath = calloc(strnlen(path, PATH_MAX) + strnlen(cwd, PATH_MAX) + 2, sizeof(char)),
          return NULL);
-    strncat(absPath, cwd, PATH_MAX);
-    strncat(absPath, path, PATH_MAX);
+    // strncat(absPath, cwd, PATH_MAX);
+    // strncat(absPath+strnlen(absPath,PATH_MAX), path, PATH_MAX);
+    ec_neg(snprintf(absPath, PATH_MAX,"%s/%s",cwd,path), return NULL);
     return absPath;
 }
 
@@ -336,6 +339,17 @@ cleanup:
     return -1;
 }
 
+int specialDir (const char *path) {
+    char *fname = strrchr(path,'/');
+    if (!strncmp(fname,"/..", PATH_MAX) || !strncmp(fname,"/.", PATH_MAX)) return 1;
+    return 0;
+}
+
+int specialFile (const char *name) {
+    if (!strncmp(name,"..", PATH_MAX) || !strncmp(name,".", PATH_MAX)) return 1;
+    return 0;
+}
+
 /**
  * Stores 'n' file paths from 'dirname' in '*plist'
  * @returns 0 success, -1 error
@@ -348,8 +362,10 @@ int getFilesFromDir(const char *dirname, int n, queue **plist)
     ec_z(dir = opendir(dirname), goto cleanup;);
     struct dirent *file;
     size_t dirLen = strnlen(dirname, PATH_MAX);
-    while (n-- && (file = readdir(dir)) != NULL)
+    _Bool all = (n > 0) ? 0 : 1;
+    while ((all || n--) && (file = readdir(dir)) != NULL)
     {
+        if (specialFile(file->d_name)) continue;
         ec_z(path = malloc((dirLen + strnlen(file->d_name, PATH_MAX) + 2) * sizeof(char)), goto cleanup);
         ec_neg(snprintf(path, PATH_MAX, "%s/%s", dirname, file->d_name), goto cleanup);
         ec_neg1(queueEnqueue(*plist, path), goto cleanup);

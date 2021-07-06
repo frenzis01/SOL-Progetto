@@ -250,18 +250,16 @@ void *dispatcher(void *arg)
                     ec_neg1(fd_c = accept(fd_skt, NULL, 0), {});
                     if (myShutdown) // If exiting, don't accept new clients
                     {
-                        puts("Dispatcher - New connection refused");
+                        puts(ANSI_COLOR_YELLOW "Dispatcher - New connection refused" ANSI_COLOR_RESET);
                         ec_neg1(close(fd_c), exit(EXIT_FAILURE));
                     }
                     else
                     {
-                        puts("Dispatcher - New connection accepted");
                         // activeConnections++;
                         // ec_z(addClient(fd_c),DS_DIE_ON_ERR);
                         Client *tmp = addClient(fd_c);
                         ec_z(tmp, DS_DIE_ON_ERR);
-                        printf("\n--------CLIENT: %d\n", tmp->fd);
-                        puts("DEBUG");
+                        printf(ANSI_COLOR_YELLOW "Dispatcher - New connection accepted : %d\n" ANSI_COLOR_RESET, tmp->fd);
                         if (snprintf(toLog, LOGBUF_LEN, "CLIENT NEW: %d", fd_c) < 0)
                         {
                             DS_DIE_ON_ERR
@@ -286,7 +284,7 @@ void *dispatcher(void *arg)
                     { // a client left
                         // activeConnections--;
                         fdFromWorker *= -1;
-                        printf("dispatcher - Removing client %d\n", fdFromWorker);
+                        printf(ANSI_COLOR_YELLOW "Dispatcher - Removing client %d\n" ANSI_COLOR_RESET, fdFromWorker);
                         // TODO add mutex for clients structure and removeClient + notify in Worker 
                         ec_neg1(removeClient(fdFromWorker, &toNotify), DS_DIE_ON_ERR);
                         // TODO remove this free
@@ -301,7 +299,7 @@ void *dispatcher(void *arg)
                     }
                     else
                     {
-                        puts("dispatcher - Worker has done");
+                        puts(ANSI_COLOR_YELLOW "Dispatcher - Worker has done" ANSI_COLOR_RESET);
                         FD_SET(fdFromWorker, &set);
                         if (fdFromWorker > fd_hwm)
                             fd_hwm = fdFromWorker;
@@ -309,13 +307,13 @@ void *dispatcher(void *arg)
                 }
                 else if (fd == SIGNAL_READ) // Wake from signal handler
                 {
-                    puts("Dispatcher - SIGNAL RECEIVED");
+                    puts(ANSI_COLOR_YELLOW "Dispatcher - SIGNAL RECEIVED" ANSI_COLOR_RESET);
                     if (myShutdown == HARSH_QUIT || (myShutdown == HUP_QUIT && NoMoreClients()))
                         goto dispatcher_cleanup;
                 }
                 else // New request
                 {
-                    puts("Dispatcher - Request");
+                    puts(ANSI_COLOR_YELLOW "Dispatcher - Request" ANSI_COLOR_RESET);
                     // instead of reading here, i push the fd in the buffer
                     FD_CLR(fd, &set);
                     if (fd == fd_hwm)

@@ -10,26 +10,20 @@
     }
 
 #define CHK_PREV_W                                                                                      \
-    do                                                                                                  \
-    {                                                                                                   \
         if (!(*opList)->tail || (((Option *)((*opList)->tail->data))->flag != 'w' &&                    \
                                  ((Option *)((*opList)->tail->data))->flag != 'W'))                     \
         {                                                                                               \
             puts(ANSI_COLOR_RED "Option -D requires -W or -w as precedent option.\n" ANSI_COLOR_RESET); \
             continue;                                                                                   \
         }                                                                                               \
-    } while (0);
 
 #define CHK_PREV_R                                                                                      \
-    do                                                                                                  \
-    {                                                                                                   \
         if (!(*opList)->tail || (((Option *)((*opList)->tail->data))->flag != 'r' &&                    \
                                  ((Option *)((*opList)->tail->data))->flag != 'R'))                     \
         {                                                                                               \
-            puts(ANSI_COLOR_RED "Option -D requires -W or -w as precedent option.\n" ANSI_COLOR_RESET); \
+            puts(ANSI_COLOR_RED "Option -d requires -R or -r as precedent option.\n" ANSI_COLOR_RESET); \
             continue;                                                                                   \
         }                                                                                               \
-    } while (0);
 
 int storeArgs(queue **res, char *args);
 

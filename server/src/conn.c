@@ -5,6 +5,7 @@ void setFlags(Request *req, int flags);
 #define SZSHORT sizeof(unsigned short)
 #define SZINT sizeof(int)
 
+// TODO remmove printf debug
 Request *getRequest(int fd, int *msg)
 {
     errno = 0;
@@ -23,7 +24,7 @@ Request *getRequest(int fd, int *msg)
 
     int bread = 0, singleRead;
     ec_neg1(singleRead = readn(fd, &(req->op), SZCHAR), free(req); return NULL;); // should read 1 byte
-    printf("%d\n", singleRead);
+    // printf("%d\n", singleRead);
     bread += singleRead;
 
     if (singleRead == 0) // client closed the connection
@@ -35,33 +36,33 @@ Request *getRequest(int fd, int *msg)
 
 
     ec_neg1(singleRead = readn(fd, &(oflags), SZCHAR), free(req); return NULL;);
-    printf("%d\n", singleRead);
+    // printf("%d\n", singleRead);
     bread += singleRead;
     ec_neg1(singleRead = readn(fd, &(req->nfiles), SZINT), free(req); return NULL;);
-    printf("%d\n", singleRead);
+    // printf("%d\n", singleRead);
     bread += singleRead;
     ec_neg1(singleRead = readn(fd, &(req->pathLen), SZSHORT), free(req); return NULL;);
-    printf("%d\n", singleRead);
+    // printf("%d\n", singleRead);
     bread += singleRead;
     ec_neg1(singleRead = readn(fd, &(req->dirnameLen), SZSHORT), free(req); return NULL;);
-    printf("%d\n", singleRead);
+    // printf("%d\n", singleRead);
     bread += singleRead;
     ec_neg1(singleRead = readn(fd, &(req->appendLen), sizeof(size_t)), free(req); return NULL;);
-    printf("%d\n", singleRead);
+    // printf("%d\n", singleRead);
     bread += singleRead; // LETTURA CAMPI "DINAMICI"
     // TODO check +1;
     // PATH
     int pathlen;
     ec_z(req->path = calloc(req->pathLen + 1, SZCHAR), freeRequest(req); return NULL;);
     ec_neg1(pathlen = readn(fd, req->path, req->pathLen * SZCHAR), return NULL;); // DIRNAME
-    printf("path: %d\n", pathlen);
+    // printf("path: %d\n", pathlen);
     bread += pathlen;
     // if (req->dirnameLen)
     {
         ec_z(req->dirname = calloc(req->dirnameLen + 1, SZCHAR), freeRequest(req); return NULL;);
 
         ec_neg1(singleRead = readn(fd, req->dirname, req->dirnameLen * SZCHAR), return NULL;);
-        printf("%d\n", singleRead);
+        // printf("%d\n", singleRead);
         bread += singleRead;
     }
     // APPEND
@@ -70,7 +71,7 @@ Request *getRequest(int fd, int *msg)
         ec_z(req->append = calloc(req->appendLen + 1, SZCHAR), freeRequest(req); return NULL;);
 
         ec_neg1(singleRead = readn(fd, req->append, req->appendLen * SZCHAR), return NULL;);
-        printf("%d\n", singleRead);
+        // printf("%d\n", singleRead);
         bread += singleRead;
     }
 
@@ -81,8 +82,7 @@ Request *getRequest(int fd, int *msg)
     // Only the thread dispatcher is allowed to add clients
     ec_neg1(snprintf(fdBuf, INT_LEN, "%06d", fd), freeRequest(req); return NULL;);
     ec_z(req->client = icl_hash_find(clients, fdBuf), freeRequest(req); errno = EBADF; return NULL;);
-    // ec_neg1(readn(fd, &singleRead, 1), freeRequest(req); return NULL);
-    printf("bytes read: %d\n", bread);
+    // printf("bytes read: %d\n", bread);
     return req;
 }
 

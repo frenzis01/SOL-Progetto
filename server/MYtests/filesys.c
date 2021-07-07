@@ -119,10 +119,12 @@ int main(void)
 
     // LockersPending
     assert(!lockFile(paths[1], clients[1]));
+    assert(!lockFile(paths[1], clients[1]));
     assert(lockFile(paths[1], clients[2]) == 1);
     assert(lockFile(paths[1], clients[3]) == 1);
 
     assert(unlockFile(paths[1], clients[1]) == clients[2]->fd);
+    assert(!lockFile(paths[1], clients[2]));
     assert(unlockFile(paths[1], clients[2]) == clients[3]->fd);
     assert(unlockFile(paths[1], clients[3]) == 0);
 

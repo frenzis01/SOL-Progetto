@@ -123,8 +123,20 @@ void setFlags(Request *req, int flags)
 sigset_t initSigMask()
 {
     sigset_t set;
-    /*we want to handle these signals, we will do it with sigwait*/
-    ec(sigemptyset(&set), -1, exit(EXIT_FAILURE));        /*empty mask*/
+
+    // TODO clean
+    // mask all signals
+    // ec_neg1(sigfillset(&set), exit(EXIT_FAILURE));
+    // ec_neg1(pthread_sigmask(SIG_SETMASK, &set, NULL), exit(EXIT_FAILURE)); 
+
+        // ignore SIGPIPE
+        struct sigaction saa;
+    memset(&saa, 0, sizeof(saa));
+    saa.sa_handler = SIG_IGN;
+    ec_neg1(sigaction(SIGPIPE, &saa, NULL), exit(EXIT_FAILURE));
+
+        /*we want to handle these signals, we will do it with sigwait*/
+        ec(sigemptyset(&set), -1, exit(EXIT_FAILURE));    /*empty mask*/
     ec(sigaddset(&set, SIGINT), -1, exit(EXIT_FAILURE));  /* it will be handled with sigwait only */
     ec(sigaddset(&set, SIGQUIT), -1, exit(EXIT_FAILURE)); /* it will be handled with sigwait only */
     ec(sigaddset(&set, SIGHUP), -1, exit(EXIT_FAILURE));  /* it will be handled with sigwait only */
@@ -180,9 +192,10 @@ _Bool NoMoreClients()
 }
 
 // debug utility
-void printRequest(Request *req)
+void printRequest(Request *req, int fd)
 {
-    printf("REQ: %d %d %d %d %hd %hd %ld %s %s %s\n",
+    printf("REQ %d: %d %d %d %d %hd %hd %ld %s %s %s\n",
+           fd,
            req->op,
            req->o_creat,
            req->o_lock,

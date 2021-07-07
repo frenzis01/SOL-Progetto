@@ -56,7 +56,7 @@ Client *addClient(int fd);
 
 _Bool NoMoreClients();
 
-void printRequest (Request *req);
+void printRequest (Request *req, int fd);
 
 
 #endif

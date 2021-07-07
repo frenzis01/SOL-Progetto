@@ -18,7 +18,7 @@
 #include <stdarg.h>
 #include <string.h>
 
-_Bool pFlag = 1;
+_Bool pFlag = 0;
 char *dirEvicted = NULL;
 
 int openConnection(const char* sockname, int msec,const struct timespec abstime);

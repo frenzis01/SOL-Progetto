@@ -14,7 +14,7 @@ LIBS_SERVER_SO = lib/libqueue.so lib/libutils.so lib/liblogger.so lib/libfilesys
 
 #tests
 test1: test/test1.sh bin/client bin/server
-	rm -f sock
+	rm -r -f test/read/* test/evicted/*
 	test/test1.sh
 
 bin/server: src/server.c lib/libserver.so $(INCDIR)/server.h
@@ -24,7 +24,6 @@ bin/server: src/server.c lib/libserver.so $(INCDIR)/server.h
 
 bin/client: src/client.c lib/libclientApi.so lib/libclientUtils.so lib/libutils.so lib/libparser.so lib/libqueue.so $(INCDIR)/client.h
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lclientApi -lutils -lclientUtils -lparser -lqueue
-	rm -r evicted 
 
 #My own tests
 bin/filesys: MYtests/filesys.c lib/libfilesys.so lib/libqueue.so lib/libconn.so lib/liblogger.so lib/libicl_hash.so
@@ -42,7 +41,7 @@ bin/parser:	MYtests/parser.c lib/libparser.so lib/libqueue.so
 
 bin/clientApi: MYtests/clientApi.c lib/libclientApi.so $(INCDIR)/protocol.h
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lclientApi -lutils -lclientUtils
-	rm -r evicted
+	rm -r evicted/*
 
 #shared libs
 lib/libqueue.so: lib/queue.o $(INCDIR)/queue.h
@@ -89,4 +88,4 @@ clean:
 
 cleanall:
 	rm -f $(TARGETS) lib/* bin/* log.txt
-	rm -r evicted
+	rm -r test/evicted/* test/read/*

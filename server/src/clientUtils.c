@@ -68,7 +68,8 @@ int storeFileInDir(evictedFile *f, const char *dirname)
          goto store_cleanup);
 
     ec_neg(snprintf(command, strlen(sh_mkdir) + PATH_MAX, "%s%s", sh_mkdir, newPath), goto store_cleanup);
-    ec_nz(system(command), goto store_cleanup);
+    ec_neg1(system(command), puts("-------command fails");goto store_cleanup);
+    // TODO check system return
 
     // Directories created,
     // now to open the file we need the entire path back

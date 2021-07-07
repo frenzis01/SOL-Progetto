@@ -221,6 +221,7 @@ int writeFilesList(queue *files, const char *dirname)
     return 0;
 
 cleanup:
+    queueDestroy(files);
     free(buf);
     free(path);
     return -1;
@@ -262,7 +263,7 @@ int readFilesList(queue *files, const char *dirname)
             if (dirname)
             {
                 f = evictedWrap(path, buf, size);
-                ec_neg1(storeFileInDir(f, dirname), goto cleanup);
+                ec_neg1(storeFileInDir(f, dirname), puts("REAAAAAAAAAAAD"); goto cleanup);
                 // freeEvicted(f);
                 free(path);
                 free(buf);
@@ -283,6 +284,7 @@ int readFilesList(queue *files, const char *dirname)
 
 cleanup:
     freeEvicted(f);
+    queueDestroy(files);
     // free(buf);
     // free(path);
     return -1;

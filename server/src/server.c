@@ -45,7 +45,7 @@ typedef struct
 
 // Prototypes
 int sendFileToClient(evictedFile *fptr, int fd);
-int notifyPendingLockers(queue *lockers, const short msg);
+int notifyPendingLockers(queue *lockers, int msg);
 void *signalHandler(void *args);
 int removeClient(int fd, queue **notifyLockers);
 
@@ -98,7 +98,8 @@ void removeSocket()
 
 int main(int argc, char **argv)
 {
-    if (argc == 1){
+    if (argc == 1)
+    {
         puts(BRED "No config.txt path specified. Exiting..." BWHT);
         exit(EXIT_FAILURE);
     }
@@ -118,7 +119,7 @@ int main(int argc, char **argv)
     ServerData meta;
     ec_neg1(readConfig(config, &meta), exit(EXIT_FAILURE));
     ec_neg1(storeInit(meta.nfiles, meta.capacity, meta.evictPolicy), exit(EXIT_FAILURE));
-    ec_nz(pthread_mutex_init(&lockClients,NULL), exit(EXIT_FAILURE));
+    ec_nz(pthread_mutex_init(&lockClients, NULL), exit(EXIT_FAILURE));
     ec_z(clients = icl_hash_create(H_BUCKETS, NULL, NULL), exit(EXIT_FAILURE));
     size_t poolSize = meta.workers;
     sockName = meta.sockname; // declared in conn.h
@@ -271,7 +272,7 @@ void *dispatcher(void *arg)
                     int fdFromWorker;
                     ec_neg1(readn(MANAGER_READ, &fdFromWorker, sizeof(int)), DS_DIE_ON_ERR);
                     if (fdFromWorker < 0) // a client left
-                    {   // The worker who wrote has already removed the client from the filesys 
+                    {                     // The worker who wrote has already removed the client from the filesys
                         currNClient--;
                         fdFromWorker *= -1;
                         printf(ANSI_COLOR_YELLOW "Dispatcher - Removing client %d - %ld\n" ANSI_COLOR_RESET, fdFromWorker, currNClient);
@@ -285,7 +286,7 @@ void *dispatcher(void *arg)
                     }
                     else
                     {
-                        puts(ANSI_COLOR_YELLOW "Dispatcher - Worker has done" ANSI_COLOR_RESET);
+                        printf(ANSI_COLOR_YELLOW "Dispatcher - Worker has done : %d\n" ANSI_COLOR_RESET, fdFromWorker);
                         FD_SET(fdFromWorker, &set);
                         if (fdFromWorker > fd_hwm)
                             fd_hwm = fdFromWorker;
@@ -293,13 +294,20 @@ void *dispatcher(void *arg)
                 }
                 else if (fd == SIGNAL_READ) // Wake from signal handler
                 {
-                    puts(ANSI_COLOR_YELLOW "Dispatcher - SIGNAL RECEIVED" ANSI_COLOR_RESET);
+                    // puts(ANSI_COLOR_YELLOW "Dispatcher - SIGNAL RECEIVED" ANSI_COLOR_RESET);
+                    printf("\n\n\n\nSIGNAL RECEIVED - active_clients = %ld %d %d\n\n\n\n", currNClient, myShutdown, NoMoreClients());
                     if (myShutdown == HARSH_QUIT || (myShutdown == HUP_QUIT && NoMoreClients()))
+                    {
+                        puts("\t...EXITING...");
                         goto dispatcher_cleanup;
+                    }
+                    else{
+                        FD_CLR(SIGNAL_READ, &set);
+                    }
                 }
                 else // New request
                 {
-                    puts(ANSI_COLOR_YELLOW "Dispatcher - Request" ANSI_COLOR_RESET);
+                    printf(ANSI_COLOR_YELLOW "Dispatcher - Request %d\n" ANSI_COLOR_RESET, fd);
                     // instead of reading here, i push the fd in the buffer
                     FD_CLR(fd, &set);
                     if (fd == fd_hwm)
@@ -381,7 +389,8 @@ void *worker(void *args)
         // GET A REQUEST
         ec_nz(pthread_mutex_lock(&lockReq), {});
 
-        ec_nz(pthread_cond_wait(&condReq, &lockReq), {}); // wait for requests
+        while(queueIsEmpty(requests))
+            ec_nz(pthread_cond_wait(&condReq, &lockReq), {}); // wait for requests
         eo_af(requestor = queueDequeue(requests), WK_DIE_ON_ERR);
         ec_nz(pthread_mutex_unlock(&lockReq), {});
         if (!requestor) // TERMINATION REQUEST SENT BY main()
@@ -393,14 +402,14 @@ void *worker(void *args)
         {
             ec_neg1(removeClient(fd, &notifyLockers), WK_DIE_ON_ERR);
             // if there was at least one pending locker on a file O_LOCKed by
-            // the removed client, we must notify it of the successful lockFile() 
-            ec_neg1(notifyPendingLockers(notifyLockers,SUCCESS), WK_DIE_ON_ERR);
+            // the removed client, we must notify it of the successful lockFile()
+            ec_neg1(notifyPendingLockers(notifyLockers, SUCCESS), WK_DIE_ON_ERR);
             notifyLockers = NULL;
 
             ec_neg1(snprintf(toLog, LOGBUF_LEN, "CLIENT LEFT: %d", fd), WK_DIE_ON_ERR);
             eo_af(LoggerLog(toLog, strlen(toLog)), WK_DIE_ON_ERR);
 
-            // if there are no more clients and we are HUP-exiting, 
+            // if there are no more clients and we are HUP-exiting,
             // dispatcher will manage exit
             printf(ANSI_COLOR_GREEN "Client %d closed\n" ANSI_COLOR_RESET, fd);
             fd *= -1;
@@ -412,7 +421,7 @@ void *worker(void *args)
             WK_DIE_ON_ERR;
         }
         puts(ANSI_COLOR_GREEN "Request accepted" ANSI_COLOR_RESET);
-        printRequest(req);
+        printRequest(req, fd);
         switch (req->op)
         {
         case OPEN_FILE:
@@ -438,7 +447,10 @@ void *worker(void *args)
         case LOCK_FILE:
             log(lockFile(req->path, req->client), myTid, WK_DIE_ON_ERR);
             if (errnosave == EACCES)
+            {
+                freeRequest(req);
                 continue; // in this case, the client has to wait
+            }
             break;
 
         case UNLOCK_FILE:
@@ -446,7 +458,8 @@ void *worker(void *args)
             if (res > 1) // notify new lock owner
             {
                 errnosave = 0;
-                ec_neg1(writen(fd, &errnosave, sizeof(int)), WK_DIE_ON_ERR);
+                ec_neg1(writen(res, &errnosave, sizeof(int)), WK_DIE_ON_ERR);
+                ec_neg1(writen(WORKER_WRITE, &res, sizeof(int)), WK_DIE_ON_ERR); // put res(fd) back in select set
             }
             break;
 
@@ -505,8 +518,11 @@ void *worker(void *args)
             //Can be openVictim or readFile target or remove target
             // nEvicted = 1;
             // ec_neg1(writen(fd, &nEvicted, sizeof(size_t)), WK_DIE_ON_ERR);
-
+            puts("---------------EVICTING FILE--------------");
+            printEvicted(evicted);
+            printf("\n\t NOTIFY LOCKERS ADDRESS: %p\n", (void*)evicted->notifyLockers);
             ec_neg1(sendFileToClient(evicted, fd), WK_DIE_ON_ERR);
+            puts("---------------FILE SENT--------------");
             if (req->op != READ_FILE) // if it is a victim
             {
                 ec_neg1(notifyPendingLockers(evicted->notifyLockers, FILE_NOT_FOUND), WK_DIE_ON_ERR);
@@ -514,10 +530,10 @@ void *worker(void *args)
             }
             freeEvicted(evicted);
         }
-        if (notifyLockers)
-        {
-            ec_neg1(notifyPendingLockers(notifyLockers, FILE_NOT_FOUND), WK_DIE_ON_ERR);
-        }
+        // if (notifyLockers) // TODO should never catch this
+        // {
+        //     ec_neg1(notifyPendingLockers(notifyLockers, FILE_NOT_FOUND), WK_DIE_ON_ERR);
+        // }
 
         evicted = NULL;
         evictedList = NULL;
@@ -530,9 +546,11 @@ void *worker(void *args)
     }
 
 worker_cleanup:
+    if (req)
+        freeRequest(req);
     queueDestroy(evictedList);
-    queueDestroy(notifyLockers);
     freeEvicted(evicted);
+    queueDestroy(notifyLockers);
     evicted = NULL;
     evictedList = NULL;
     notifyLockers = NULL;
@@ -570,18 +588,27 @@ int sendFileToClient(evictedFile *fptr, int fd)
  * @param msg one the response codes
  * @returns 0 success, -1 error (errno set)
  */
-int notifyPendingLockers(queue *lockers, const short msg)
+int notifyPendingLockers(queue *lockers, int msg)
 {
     errno = 0;
     Client *curr = queueDequeue(lockers);
     while (!errno && curr)
     {
-        // errno might get dirty here
-        char buf[1];
-        buf[1] = msg; // notify client
-        ec_n(writen(curr->fd, buf, 1), 1, queueDestroy(lockers); return -1;);
+        // int fd = curr->fd;
+        // printf("QUEUE SIZE %ld\n", lockers->size);
+        // printf("CURR ADDRESS %p | FD %d %d\n", curr, curr->fd, fd);
+        // // errno might get dirty here
+        // char buf = msg;
+        // int buf[1];
+        // buf[0] = msg;
+        // char *buf;
+        // ec_z(buf = calloc(1,sizeof(char)), exit(EXIT_FAILURE)); //TODO
+        // *buf = msg;
+        // notify client
+        ec_n(writen(curr->fd, &msg, sizeof(int)), sizeof(int), /* queueDestroy(lockers); */ return -1;); // TODO queue destroyed by worker ok?
+        // free(buf);
         // notify dispatcher to put fd back into select's set
-        ec_n(writen(WORKER_WRITE, &(curr->fd), sizeof(int)), sizeof(int), queueDestroy(lockers); return -1;);
+        ec_n(writen(WORKER_WRITE, &(curr->fd), sizeof(int)), sizeof(int), /* queueDestroy(lockers); */ return -1;);
 
         curr = queueDequeue(lockers);
     }

@@ -1,0 +1,5 @@
+capacity=1000000
+workers=4
+sockname=sock
+nfiles=10000
+evictPolicy=0

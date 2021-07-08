@@ -136,11 +136,12 @@ sigset_t initSigMask()
     ec_neg1(sigaction(SIGPIPE, &saa, NULL), exit(EXIT_FAILURE));
 
         /*we want to handle these signals, we will do it with sigwait*/
-        ec(sigemptyset(&set), -1, exit(EXIT_FAILURE));    /*empty mask*/
-    ec(sigaddset(&set, SIGINT), -1, exit(EXIT_FAILURE));  /* it will be handled with sigwait only */
-    ec(sigaddset(&set, SIGQUIT), -1, exit(EXIT_FAILURE)); /* it will be handled with sigwait only */
-    ec(sigaddset(&set, SIGHUP), -1, exit(EXIT_FAILURE));  /* it will be handled with sigwait only */
-    ec(pthread_sigmask(SIG_BLOCK, &set, NULL), -1, exit(EXIT_FAILURE));
+        ec_neg1(sigemptyset(&set), exit(EXIT_FAILURE));    /*empty mask*/
+    ec_neg1(sigaddset(&set, SIGINT), exit(EXIT_FAILURE));  /* it will be handled with sigwait only */
+    ec_neg1(sigaddset(&set, SIGQUIT), exit(EXIT_FAILURE)); /* it will be handled with sigwait only */
+    ec_neg1(sigaddset(&set, SIGHUP), exit(EXIT_FAILURE));  /* it will be handled with sigwait only */
+    ec_neg1(sigaddset(&set, SIGUSR1), exit(EXIT_FAILURE));  /* it will be handled with sigwait only */
+    ec_neg1(pthread_sigmask(SIG_BLOCK, &set, NULL), exit(EXIT_FAILURE));
     return set;
 }
 
@@ -194,7 +195,8 @@ _Bool NoMoreClients()
 // debug utility
 void printRequest(Request *req, int fd)
 {
-    printf("REQ %d: %d %d %d %d %hd %hd %ld %s %s %s\n",
+    // TODO put append back again ?
+    printf("REQ %d: %d %d %d %d %hd %hd %ld %s %s <appendContent>\n",
            fd,
            req->op,
            req->o_creat,
@@ -204,7 +206,7 @@ void printRequest(Request *req, int fd)
            req->dirnameLen,
            req->appendLen,
            req->path,
-           req->dirname,
-           req->append);
+           req->dirname/*,
+           req->append*/);
     return;
 }

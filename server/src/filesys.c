@@ -987,14 +987,18 @@ strcln_cleanup:
 
 int storeStats()
 {
-    puts(ANSI_COLOR_CYAN "-----STORE STATISTICS:" ANSI_COLOR_RESET);
+    ec_nz_f(LOCKSTORE);
+    puts(BCYN "\n-----STORE STATISTICS:" REG);
     printf(
-        ANSI_COLOR_BLUE "Max #files reached: %ld\n" ANSI_COLOR_GREEN "Max size reached: %ld\n" ANSI_COLOR_MAGENTA "#evicted: %ld\n" ANSI_COLOR_YELLOW "Files currently in the storage:\n" ANSI_COLOR_RESET,
+        BBLU "Max #files reached: %ld\nCurrent #files: %ld\n" BGRN "Max size reached: %ld\nCurrent size: %ld\n" BMAG "#evicted: %ld\n" BYEL "Files currently in the storage:\n" REG,
         store.maxNfilesReached,
+        store.currNfiles,
         store.maxSizeReached,
+        store.currSize,
         store.nEviction);
     ec_neg1(queueCallback(store.files, printPath),return -1);
-    puts(ANSI_COLOR_CYAN "-----END" ANSI_COLOR_RESET);
+    puts(BCYN "-----END\n" REG);
+    ec_nz_f(UNLOCKSTORE);
     return 0;
 }
 

@@ -23,6 +23,8 @@
 // #define ANSI_COLOR_MAGENTA "\033[1;35m"
 #define ANSI_COLOR_CYAN "\x1b[36m"
 #define ANSI_COLOR_RESET "\x1b[0m"
+#define REG "\x1b[0m"
+
 
 #define BBLK "\033[1;30m"
 #define BRED "\033[1;31m"

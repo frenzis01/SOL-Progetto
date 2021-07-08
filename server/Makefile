@@ -17,6 +17,10 @@ test1: test/test1.sh bin/client bin/server
 	rm -r -f test/read/* test/evicted/*
 	test/test1.sh
 
+test2: test/test2.sh bin/client bin/server
+	rm -r -f test/read/* test/evicted/*
+	test/test2.sh
+
 bin/server: src/server.c lib/libserver.so $(INCDIR)/server.h
 	rm -f sock
 	rm -f log.txt
@@ -26,20 +30,20 @@ bin/client: src/client.c lib/libclientApi.so lib/libclientUtils.so lib/libutils.
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lclientApi -lutils -lclientUtils -lparser -lqueue
 
 #My own tests
-bin/filesys: MYtests/filesys.c lib/libfilesys.so lib/libqueue.so lib/libconn.so lib/liblogger.so lib/libicl_hash.so
+bin/filesys: mytests/filesys.c lib/libfilesys.so lib/libqueue.so lib/libconn.so lib/liblogger.so lib/libicl_hash.so
 	#filesys
 	rm -f log.txt
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lfilesys -lqueue -lconn -llogger -lpthread -licl_hash
 
-bin/mt_filesys: MYtests/mt_filesys.c lib/libfilesys.so lib/libqueue.so lib/libconn.so lib/liblogger.so
+bin/mt_filesys: mytests/mt_filesys.c lib/libfilesys.so lib/libqueue.so lib/libconn.so lib/liblogger.so
 	#filesys multithread
 	rm -f log.txt
 	$(CC) $(CFLAGS) -fno-stack-protector $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lfilesys -lqueue -lconn -llogger -licl_hash -lpthread
 
-bin/parser:	MYtests/parser.c lib/libparser.so lib/libqueue.so 
+bin/parser:	mytests/parser.c lib/libparser.so lib/libqueue.so 
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lqueue -lparser -lutils
 
-bin/clientApi: MYtests/clientApi.c lib/libclientApi.so $(INCDIR)/protocol.h
+bin/clientApi: mytests/clientApi.c lib/libclientApi.so $(INCDIR)/protocol.h
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lclientApi -lutils -lclientUtils
 	rm -r evicted/*
 
@@ -88,4 +92,4 @@ clean:
 
 cleanall:
 	rm -f $(TARGETS) lib/* bin/* log.txt
-	rm -r test/evicted/* test/read/*
+	rm -rf test/evicted/* test/read/*

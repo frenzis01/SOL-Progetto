@@ -171,6 +171,7 @@ int main(int argc, char **argv)
     close(MANAGER_READ);
 
     icl_hash_destroy(clients, free, free);
+    storeStats();
     storeDestroy();
     queueDestroy(requests);
 
@@ -295,14 +296,23 @@ void *dispatcher(void *arg)
                 else if (fd == SIGNAL_READ) // Wake from signal handler
                 {
                     // puts(ANSI_COLOR_YELLOW "Dispatcher - SIGNAL RECEIVED" ANSI_COLOR_RESET);
-                    printf("\n\n\n\nSIGNAL RECEIVED - active_clients = %ld %d %d\n\n\n\n", currNClient, myShutdown, NoMoreClients());
+                    // printf("\n\n\n\nSIGNAL RECEIVED - active_clients = %ld %d %d\n\n\n\n", currNClient, myShutdown, NoMoreClients());
+                    // TODO note that between these two lines NoMoreClients might change
                     if (myShutdown == HARSH_QUIT || (myShutdown == HUP_QUIT && NoMoreClients()))
                     {
                         puts("\t...EXITING...");
                         goto dispatcher_cleanup;
                     }
                     else{
-                        FD_CLR(SIGNAL_READ, &set);
+                        int sig = 0;
+                        readn(SIGNAL_READ,&sig,sizeof(int));
+                        if (sig == SIGUSR1) {   // print Stats
+                            ec_z(requestor = malloc(sizeof(Client)), DS_DIE_ON_ERR);
+                            requestor->fd = -1;
+                            PUSH_REQUEST(requestor);
+                        }
+                        else // HUP_EXITING but still some clients connected
+                            FD_CLR(SIGNAL_READ, &set); // sigHandler returned, no reason to keep listening 
                     }
                 }
                 else // New request
@@ -337,15 +347,19 @@ void *signalHandler(void *args)
         {
         case SIGINT:
         case SIGQUIT:
-            puts(ANSI_COLOR_BLUE "SIGNAL RECEIVED" ANSI_COLOR_RESET);
+            puts(ANSI_COLOR_BLUE "SIGINT or SIGQUIT RECEIVED" ANSI_COLOR_RESET);
             myShutdown = HARSH_QUIT;
             close(SIGNAL_WRITE);
             return NULL;
         case SIGHUP:
-            puts(ANSI_COLOR_CYAN "SIGNAL RECEIVED" ANSI_COLOR_RESET);
+            puts(ANSI_COLOR_CYAN "SIGHUP RECEIVED" ANSI_COLOR_RESET);
             myShutdown = HUP_QUIT;
             close(SIGNAL_WRITE);
             return NULL;
+        case SIGUSR1:
+            puts(ANSI_COLOR_CYAN "STATS REQUEST RECEIVED" ANSI_COLOR_RESET);
+            write(SIGNAL_WRITE,&sig,sizeof(int));
+            break;  // back in the loop
         default:;
         }
     }
@@ -393,8 +407,14 @@ void *worker(void *args)
             ec_nz(pthread_cond_wait(&condReq, &lockReq), {}); // wait for requests
         eo_af(requestor = queueDequeue(requests), WK_DIE_ON_ERR);
         ec_nz(pthread_mutex_unlock(&lockReq), {});
-        if (!requestor) // TERMINATION REQUEST SENT BY main()
+        if (!requestor)     // TERMINATION REQUEST SENT BY main()
             goto worker_cleanup;
+        if (requestor->fd == -1)    // STORESTATS REQUEST
+        {
+            free(requestor);
+            storeStats();
+            continue;
+        }
         fd = requestor->fd;
 
         req = getRequest(fd);
@@ -485,7 +505,7 @@ void *worker(void *args)
             ec_neg1(writen(fd, &errnosave, sizeof(int)), WK_DIE_ON_ERR);
         }
 
-        if ((!evicted || !evictedList) &&
+        if ((!evicted && !evictedList) &&
             (req->op == OPEN_FILE ||
              req->op == APPEND ||
              req->op == WRITE_FILE))
@@ -498,6 +518,7 @@ void *worker(void *args)
         if (evictedList) // Send back to client and notify pending lockers
         {
             // Can be capacityVictims or readNfiles target
+            printf(ANSI_COLOR_GREEN "\tServer evicting: %ld\n" ANSI_COLOR_RESET,evictedList->size);
             ec_neg1(writen(fd, &(evictedList->size), sizeof(size_t)), WK_DIE_ON_ERR);
             evictedFile *curr = queueDequeue(evictedList);
             while (curr)
@@ -518,11 +539,11 @@ void *worker(void *args)
             //Can be openVictim or readFile target or remove target
             // nEvicted = 1;
             // ec_neg1(writen(fd, &nEvicted, sizeof(size_t)), WK_DIE_ON_ERR);
-            puts("---------------EVICTING FILE--------------");
-            printEvicted(evicted);
-            printf("\n\t NOTIFY LOCKERS ADDRESS: %p\n", (void*)evicted->notifyLockers);
+            // puts("---------------EVICTING FILE--------------");
+            // printEvicted(evicted);
+            // printf("\n\t NOTIFY LOCKERS ADDRESS: %p\n", (void*)evicted->notifyLockers);
             ec_neg1(sendFileToClient(evicted, fd), WK_DIE_ON_ERR);
-            puts("---------------FILE SENT--------------");
+            // puts("---------------FILE SENT--------------");
             if (req->op != READ_FILE) // if it is a victim
             {
                 ec_neg1(notifyPendingLockers(evicted->notifyLockers, FILE_NOT_FOUND), WK_DIE_ON_ERR);
@@ -565,7 +586,7 @@ int sendFileToClient(evictedFile *fptr, int fd)
 {
     char *buf = NULL;
     int index = 0;
-    ec_z(buf = calloc(BUFSIZE, sizeof(char)), return -1);
+    ec_z(buf = malloc(BUFSIZE * sizeof(char)), return -1);
     // {pathLen,path,size,content}
     size_t pathLen = strnlen(fptr->path, PATH_MAX);
     memcpy(buf, &pathLen, sizeof(size_t));

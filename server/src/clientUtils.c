@@ -7,10 +7,17 @@ int printString(const char *str, size_t len)
 
     return 0;
 }
+int printEvictedPath(void *arg)
+{
+    evictedFile *c = arg;
+    ec_neg(printf(BMAG "EVCTD -- PATH: %s | CONTENT SIZE: %ld\n" REG, c->path, c->size), return -1);
+    return 0;
+}
+
 int printEvicted(void *arg)
 {
     evictedFile *c = arg;
-    ec_neg(printf(BMAG "\nEVCTD -- PATH: %s | CONTENT: " REG BMAG, c->path), return -1);
+    ec_neg(printf(BMAG "EVCTD -- PATH: %s | CONTENT: " REG BMAG, c->path), return -1);
     ec_neg(printString(c->content, c->size), return -1);
     ec_neg(printf(REG "\n"), return -1);
     errno = 0;
@@ -18,7 +25,8 @@ int printEvicted(void *arg)
 }
 void freeEvicted(void *arg)
 {
-    if (!arg) return;
+    if (!arg)
+        return;
     evictedFile *f = arg;
     free(f->content);
     free(f->path);
@@ -68,12 +76,12 @@ int storeFileInDir(evictedFile *f, const char *dirname)
          goto store_cleanup);
 
     ec_neg(snprintf(command, strlen(sh_mkdir) + PATH_MAX, "%s%s", sh_mkdir, newPath), goto store_cleanup);
-    ec_neg1(system(command), puts("-------command fails");goto store_cleanup);
-    // TODO check system return
+    ec_neg1(system(command), goto store_cleanup);
 
     // Directories created,
     // now to open the file we need the entire path back
-    *(newPath + strnlen(newPath, PATH_MAX)) = firstFileNameChar; // eliminate null character to get entire string again
+    // eliminate null character to get entire string again
+    *(newPath + strnlen(newPath, PATH_MAX)) = firstFileNameChar;
 
     // WRITE FILE
     ec_z(fptr = fopen(newPath, "w+"), goto store_cleanup);
@@ -93,4 +101,28 @@ store_cleanup:
     if (fptr)
         fclose(fptr);
     return -1;
+}
+
+/**
+ * If path is a relative path, frees path and returns corresponding absolute path
+ */
+char *getAbsolutePath(const char *path)
+{
+    if (!path)
+        return NULL;
+    char *absPath = NULL;
+    if (path == strchr(path, '/')) // path is absolute
+    {
+        ec_z(absPath = calloc((strnlen(path, PATH_MAX) + 1), sizeof(char)), return NULL);
+        ec_neg(snprintf(absPath, PATH_MAX, "%s", path), return NULL);
+        return absPath;
+    }
+    char cwd[PATH_MAX];
+    ec_z(getcwd(cwd, sizeof(cwd)), return NULL);
+    ec_z(absPath = calloc(strnlen(path, PATH_MAX) + strnlen(cwd, PATH_MAX) + 2, sizeof(char)),
+         return NULL);
+    // strncat(absPath, cwd, PATH_MAX);
+    // strncat(absPath+strnlen(absPath,PATH_MAX), path, PATH_MAX);
+    ec_neg(snprintf(absPath, PATH_MAX, "%s/%s", cwd, path), return NULL);
+    return absPath;
 }

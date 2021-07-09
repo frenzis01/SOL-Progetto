@@ -1,18 +1,24 @@
 #include <server.h>
 
 #pragma region
-#define eo(c)                                         \
-    if (errno != 0)                                   \
-    {                                                 \
+#define eo(c)                               \
+    if (errno != 0)                         \
+    {                                       \
         perror(BRED "Server Internal" REG); \
-        c;                                            \
+        c;                                  \
     }
-#define eo_af(c, f)                                   \
-    c;                                                \
-    if (errno)                                        \
-    {                                                 \
+#define eo_af(c, f)                         \
+    c;                                      \
+    if (errno)                              \
+    {                                       \
         perror(BRED "Server Internal" REG); \
-        f;                                            \
+        f;                                  \
+    }
+
+#define p(c)           \
+    if (printsEnabled) \
+    {                  \
+        c;             \
     }
 
 #define log(s, i, c)                                                      \
@@ -21,11 +27,11 @@
     strerror_r(errno, errnoBuf, 200);                                     \
     if (res == -1)                                                        \
     {                                                                     \
-        perror(BCYN "INTERNAL FATAL ERROR" REG);               \
+        perror(BCYN "INTERNAL FATAL ERROR" REG);                          \
         c;                                                                \
     }                                                                     \
     snprintf(toLog, LOGBUF_LEN, "%ld__%d__" #s "__%s", i, res, errnoBuf); \
-    puts(toLog);                                                          \
+    p(puts(toLog));                                                          \
     eo_af(LoggerLog(toLog, strlen(toLog)), WK_DIE_ON_ERR);
 
 #define PUSH_REQUEST(x, err_handle)                   \
@@ -81,13 +87,10 @@ volatile sig_atomic_t myShutdown = 0;
 #define HARSH_QUIT 2
 #define HUP_QUIT 1
 
-// Logger buf dim
-#define LOGBUF_LEN 400
-#define ERRNOBUF_LEN 200
-
 #pragma endregion
 
 char *sockName = "";
+_Bool printsEnabled = 0;
 
 void removeSocket()
 {
@@ -97,42 +100,49 @@ void removeSocket()
 
 int main(int argc, char **argv)
 {
-    if (argc == 1)
+    if (argc == 1 || argc > 3)
     {
-        puts(BRED "No config.txt path specified. Exiting..." BWHT);
+        puts(BRED "No config.txt path specified. Exiting...");
+        puts("Usage: config_file_path [ printsEnabled ]" REG);
         exit(EXIT_FAILURE);
     }
     char *config = argv[1];
+    if (argc == 3)
+        printsEnabled = 1;
+    else
+        printsEnabled = 0;
+
+    atexit(removeSocket);
+
     // Signal handler setup
     myShutdown = 0;
     ec_neg1(pipe(sigPipe), exit(EXIT_FAILURE));
     ec_neg1(pipe(mwPipe), exit(EXIT_FAILURE));
-    ec_z(requests = queueCreate(freeNothing, NULL), exit(EXIT_FAILURE));
 
+    // Signals masking
     sigset_t mask = initSigMask();
-    // ec_nz(pthread_sigmask(SIG_SETMASK, &mask, NULL), exit(EXIT_FAILURE));
     pthread_t sigHandThread;
     ec_neg1(pthread_create(&sigHandThread, NULL, signalHandler, &mask), exit(EXIT_FAILURE));
 
     // Server initialization
     ServerData meta;
     ec_neg1(readConfig(config, &meta), exit(EXIT_FAILURE));
-    ec_neg1(storeInit(meta.nfiles, meta.capacity, meta.evictPolicy), exit(EXIT_FAILURE));
-    ec_nz(pthread_mutex_init(&lockClients, NULL), exit(EXIT_FAILURE));
+
+    ec_neg1(storeInit(meta.nfiles, meta.capacity, meta.evictPolicy), exit(EXIT_FAILURE)); // STORAGE
+    ec_nz(pthread_mutex_init(&lockClients, NULL), exit(EXIT_FAILURE));                    // CLIENTS
     ec_z(clients = icl_hash_create(H_BUCKETS, NULL, NULL), exit(EXIT_FAILURE));
-    size_t poolSize = meta.workers;
-    sockName = meta.sockname; // declared in conn.h
+    ec_z(requests = queueCreate(freeNothing, NULL), exit(EXIT_FAILURE)); // MW-FIFO
+    size_t poolSize = meta.workers;                                      // META
+    sockName = meta.sockname;                                            // declared in conn.h
 
-    atexit(removeSocket); // we do not care if they were uninitialized
-
+    // Init Logger
     eo_af(LoggerCreate(LOG_PATH), storeDestroy(); exit(EXIT_FAILURE););
     eo_af(LoggerLog(STARTUP_MSG, strlen(STARTUP_MSG)), storeDestroy(); exit(EXIT_FAILURE););
 
     // Spawning threads
     pthread_t workers[poolSize], dispThread;
 
-    // Create workers first, so there is no (less) risk that requests received (and 'signaled'!) before
-    // the workers started waiting are never taken in charge
+    // Workers
     workerArgs args[1];
     args->sigHandler = &sigHandThread;
     for (size_t i = 0; i < poolSize; i++) // workers init
@@ -141,31 +151,29 @@ int main(int argc, char **argv)
         ec_neg1(pthread_create(&workers[i], NULL, worker, (void *)(args)), exit(EXIT_FAILURE));
     }
 
+    // Dispatcher/Manager
     ec_neg1(pthread_create(&dispThread, NULL, dispatcher, (void *)(&sigHandThread)), storeDestroy(); exit(EXIT_FAILURE));
 
-    // cleanup
-    ec_neg1(pthread_join(dispThread, NULL), exit(EXIT_FAILURE));
-    puts("Dispatcher joined");
+    // FROM NOW ON, WE ARE MANAGING EXIT
 
-    // send termination msg (NULL) to threads
+    // Join dispatcher first
+    ec_neg1(pthread_join(dispThread, NULL), exit(EXIT_FAILURE));
+
+    // Send termination msg (NULL) to workers who might be waiting for requests
     for (size_t i = 0; i < poolSize; i++)
     {
         PUSH_REQUEST(NULL, exit(EXIT_FAILURE));
     }
-    puts("Termination msg sent");
-
+    // Join workers
     for (size_t i = 0; i < poolSize; i++)
     {
-        // TODO pthread_timedjoin_np()
         ec_neg1(pthread_join(workers[i], NULL), exit(EXIT_FAILURE));
     }
-    puts("All workers joined");
 
     ec_neg1(pthread_join(sigHandThread, NULL), exit(EXIT_FAILURE));
-    puts("Sighandler joined");
 
-    // close(SIGNAL_WRITE);
-    // close(SIGNAL_READ);
+    puts("All threads joined");
+
     close(WORKER_WRITE);
     close(MANAGER_READ);
 
@@ -184,7 +192,7 @@ int main(int argc, char **argv)
 #define DS_DIE_ON_ERR                                                   \
     do                                                                  \
     {                                                                   \
-        perror(BRED "DISPATCHER DIED" REG);                   \
+        perror(BRED "DISPATCHER DIED" REG);                             \
         LoggerLog(DS_DEATH_MSG, strlen(DS_DEATH_MSG));                  \
         ec_nz(pthread_kill(sigHandlerRef, SIGINT), exit(EXIT_FAILURE)); \
         goto dispatcher_cleanup;                                        \
@@ -192,7 +200,7 @@ int main(int argc, char **argv)
 
 void *dispatcher(void *arg)
 {
-    puts(BYEL "Dispatcher startup" REG);
+    p(puts(BYEL "Dispatcher startup" REG));
 
     pthread_t sigHandlerRef = *((pthread_t *)arg);
     size_t currNClient = 0;
@@ -244,7 +252,7 @@ void *dispatcher(void *arg)
                     ec_neg1(fd_c = accept(fd_skt, NULL, 0), {});
                     if (myShutdown) // If exiting, don't accept new clients
                     {
-                        puts(BYEL "Dispatcher - New connection refused" REG);
+                        p(puts(BYEL "Dispatcher - New connection refused" REG));
                         ec_neg1(close(fd_c), exit(EXIT_FAILURE));
                     }
                     else
@@ -253,7 +261,7 @@ void *dispatcher(void *arg)
                         // ec_z(addClient(fd_c),DS_DIE_ON_ERR);
                         Client *tmp = addClient(fd_c);
                         ec_z(tmp, DS_DIE_ON_ERR);
-                        printf(BYEL "Dispatcher - New connection accepted : %d - %ld\n" REG, tmp->fd, currNClient);
+                        p(printf(BYEL "Dispatcher - New connection accepted : %d - %ld\n" REG, tmp->fd, currNClient));
                         if (snprintf(toLog, LOGBUF_LEN, "CLIENT ADDED: %d - %ld", fd_c, currNClient) < 0)
                         {
                             DS_DIE_ON_ERR;
@@ -278,7 +286,7 @@ void *dispatcher(void *arg)
                     {                     // The worker who wrote has already removed the client from the filesys
                         currNClient--;
                         fdFromWorker *= -1;
-                        printf(BYEL "Dispatcher - Removing client %d - %ld\n" REG, fdFromWorker, currNClient);
+                        p(printf(BYEL "Dispatcher - Removing client %d - %ld\n" REG, fdFromWorker, currNClient));
                         ec_nz(close(fdFromWorker), DS_DIE_ON_ERR);
                         ec_neg1(snprintf(toLog, LOGBUF_LEN, "CLIENT LEFT: %d - %ld", fdFromWorker, currNClient), DS_DIE_ON_ERR);
                         eo_af(LoggerLog(toLog, strlen(toLog)), DS_DIE_ON_ERR);
@@ -290,7 +298,7 @@ void *dispatcher(void *arg)
                     }
                     else
                     {
-                        printf(BYEL "Dispatcher - Worker has done : %d\n" REG, fdFromWorker);
+                        p(printf(BYEL "Dispatcher - Worker has done : %d\n" REG, fdFromWorker));
                         FD_SET(fdFromWorker, &set);
                         if (fdFromWorker > fd_hwm)
                             fd_hwm = fdFromWorker;
@@ -298,10 +306,10 @@ void *dispatcher(void *arg)
                 }
                 else if (fd == SIGNAL_READ) // Wake from signal handler
                 {
-                    puts(BYEL "Dispatcher - SIGNAL RECEIVED" REG);
+                    p(puts(BYEL "Dispatcher - SIGNAL RECEIVED" REG));
                     if (myShutdown == HARSH_QUIT || (myShutdown == HUP_QUIT && NoMoreClients()))
                     {
-                        puts("\t...EXITING...");
+                        p(puts("\t...EXITING..."));
                         goto dispatcher_cleanup;
                     }
                     else
@@ -320,7 +328,7 @@ void *dispatcher(void *arg)
                 }
                 else // New request
                 {
-                    printf(BYEL "Dispatcher - Request %d\n" REG, fd);
+                    p(printf(BYEL "Dispatcher - Request %d\n" REG, fd));
                     // instead of reading here, i push the fd in the buffer
                     FD_CLR(fd, &set);
                     if (fd == fd_hwm)
@@ -338,7 +346,7 @@ dispatcher_cleanup:
 
 void *signalHandler(void *args)
 {
-    puts(BBLU "Signal Handler startup" REG);
+    p(puts(BBLU "Signal Handler startup" REG));
     sigset_t *set = args;
     while (1)
     {
@@ -370,7 +378,7 @@ void *signalHandler(void *args)
 }
 
 #define WK_DIE_ON_ERR                                               \
-    perror(BRED "WORKER DIED" REG);                       \
+    perror(BRED "WORKER DIED" REG);                                 \
     LoggerLog(deathMSG, strlen(deathMSG));                          \
     ec_nz(pthread_kill(sigHandlerRef, SIGINT), exit(EXIT_FAILURE)); \
     goto worker_cleanup;
@@ -381,7 +389,7 @@ void *signalHandler(void *args)
  */
 void *worker(void *args)
 {
-    puts(BGRN "Worker startup" REG);
+    p(puts(BGRN "Worker startup" REG));
 
     size_t myTid = ((workerArgs *)args)->tid;
     pthread_t sigHandlerRef = *(((workerArgs *)args)->sigHandler);
@@ -434,7 +442,6 @@ void *worker(void *args)
 
             // if there are no more clients and we are HUP-exiting,
             // dispatcher will manage exit
-            printf(BGRN "Client %d closed\n" REG, fd);
             fd *= -1;
             ec_neg1(writen(WORKER_WRITE, &fd, sizeof(int)), WK_DIE_ON_ERR);
             continue;
@@ -443,8 +450,8 @@ void *worker(void *args)
         {
             WK_DIE_ON_ERR;
         }
-        puts(BGRN "Request accepted" REG);
-        printRequest(req, fd);
+        p(puts(BGRN "Request accepted" REG));
+        p(printRequest(req, fd));
         switch (req->op)
         {
         case OPEN_FILE:
@@ -482,7 +489,8 @@ void *worker(void *args)
             {
                 errnosave = 0;
                 ec_neg1(writen(res, &errnosave, sizeof(int)), WK_DIE_ON_ERR);
-                ec_neg1(writen(WORKER_WRITE, &res, sizeof(int)), WK_DIE_ON_ERR); // put res(fd) back in select set
+                ec_neg1(writen(WORKER_WRITE, &res, sizeof(int)), WK_DIE_ON_ERR);
+                // put res(fd) back in select set
             }
             break;
 
@@ -521,7 +529,6 @@ void *worker(void *args)
         if (evictedList) // Send back to client and notify pending lockers
         {
             // Can be capacityVictims or readNfiles target
-            // printf(BGRN "\tServer evicting: %ld\n" REG,evictedList->size);
             ec_neg1(writen(fd, &(evictedList->size), sizeof(size_t)), WK_DIE_ON_ERR);
             evictedFile *curr = queueDequeue(evictedList);
             while (curr)
@@ -529,7 +536,7 @@ void *worker(void *args)
                 ec_neg1(sendFileToClient(curr, fd), WK_DIE_ON_ERR);
                 if (req->op != READN_FILES) // if it is a victim
                 {
-                    ec_neg1(notifyPendingLockers(curr->notifyLockers, FILE_NOT_FOUND), WK_DIE_ON_ERR);
+                    ec_neg1(notifyPendingLockers(curr->notifyLockers, ENOENT), WK_DIE_ON_ERR);
                     curr->notifyLockers = NULL;
                 }
                 freeEvicted(curr);
@@ -540,16 +547,10 @@ void *worker(void *args)
         if (evicted)
         {
             //Can be openVictim or readFile target or remove target
-            // nEvicted = 1;
-            // ec_neg1(writen(fd, &nEvicted, sizeof(size_t)), WK_DIE_ON_ERR);
-            // puts("---------------EVICTING FILE--------------");
-            // printEvicted(evicted);
-            // printf("\n\t NOTIFY LOCKERS ADDRESS: %p\n", (void*)evicted->notifyLockers);
             ec_neg1(sendFileToClient(evicted, fd), WK_DIE_ON_ERR);
-            // puts("---------------FILE SENT--------------");
             if (req->op != READ_FILE) // if it is a victim
             {
-                ec_neg1(notifyPendingLockers(evicted->notifyLockers, FILE_NOT_FOUND), WK_DIE_ON_ERR);
+                ec_neg1(notifyPendingLockers(evicted->notifyLockers, ENOENT), WK_DIE_ON_ERR);
                 evicted->notifyLockers = NULL;
             }
             freeEvicted(evicted);
@@ -614,15 +615,14 @@ int notifyPendingLockers(queue *lockers, int msg)
     Client *curr = queueDequeue(lockers);
     while (!errno && curr)
     {
-        ec_n(writen(curr->fd, &msg, sizeof(int)), sizeof(int), /* queueDestroy(lockers); */ return -1;);
-        ec_n(writen(WORKER_WRITE, &(curr->fd), sizeof(int)), sizeof(int), /* queueDestroy(lockers); */ return -1;);
+        ec_n(writen(curr->fd, &msg, sizeof(int)), sizeof(int), return -1;);
+        ec_n(writen(WORKER_WRITE, &(curr->fd), sizeof(int)), sizeof(int), return -1;);
         curr = queueDequeue(lockers);
     }
     queueDestroy(lockers);
     return 0; // success
 }
 
-// leggi configurazione server
 /**
  * Reads "workers" "nfiles" "capacity" "sockname" "evictPolicy from a config file"
  * @returns -1 on error, 0 success
@@ -646,8 +646,6 @@ int readConfig(char *configPath, ServerData *new)
 
     if (new->evictPolicy)
         new->evictPolicy = 1;
-
-    /* code */
 
     fclose(conf);
 

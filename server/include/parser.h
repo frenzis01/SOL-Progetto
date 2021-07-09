@@ -33,5 +33,7 @@ void freeSimpleOption (void *arg);
  */
 void freeQueueOption (void *arg);
 
+int freeOptionsList(queue **oplist);
+
 
 #endif

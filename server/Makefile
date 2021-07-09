@@ -30,7 +30,7 @@ bin/server: src/server.c lib/libserver.so $(INCDIR)/server.h
 	rm -f log.txt
 	$(CC) $(CFLAGS) -fno-stack-protector $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' $(LIBS)
 
-bin/client: src/client.c lib/libclientApi.so lib/libclientUtils.so lib/libutils.so lib/libparser.so lib/libqueue.so $(INCDIR)/client.h
+bin/client: src/client.c lib/libclientApi.so lib/libclientUtils.so lib/libutils.so lib/libparser.so lib/libqueue.so
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lclientApi -lutils -lclientUtils -lparser -lqueue
 
 #My own tests

@@ -18,6 +18,8 @@ void setFlags(Request *req, int flags);
     } while (0);
 
 
+
+
 /**
  * Reads a request from an fd.
  * errno = ENOTCONN if reads eof from client
@@ -170,11 +172,9 @@ _Bool NoMoreClients()
     return 1;
 }
 
-// TODO make this better
 void printRequest(Request *req, int fd)
 {
-    // TODO put append back again ?
-    printf("REQ %d: %d %d %d %d %hd %hd %ld %s %s <appendContent>\n",
+    printf("REQ %d: %d %d %d %d %hd %hd %ld %s %s %s\n",
            fd,
            req->op,
            req->o_creat,
@@ -184,8 +184,7 @@ void printRequest(Request *req, int fd)
            req->dirnameLen,
            req->appendLen,
            req->path,
-           req->dirname /*,
-           req->append*/
-    );
+           req->dirname,
+           req->append);
     return;
 }

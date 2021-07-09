@@ -17,8 +17,6 @@
 
 typedef struct {
     int fd;
-    // queue *opened;
-    // queue *locked; 
 } Client;
 
 typedef struct {
@@ -35,7 +33,6 @@ typedef struct {
     
     Client *client;
 } Request;
-
 
 #define UNLOCKCLIENTS pthread_mutex_unlock(&lockClients)
 #define LOCKCLIENTS pthread_mutex_lock(&lockClients)

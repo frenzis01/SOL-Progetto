@@ -20,12 +20,12 @@ STARTING SERVER $S_PID
 
 
 " $REG
-sleep 2
+sleep 1
 
 #hide kill termination message using redirection
-bash -c "sleep 30 ; killall -9 spawnclients.sh> /dev/null; echo -e \"$BWHT
+bash -c "sleep 30 ; killall -9 spawnclients.sh>/dev/null; echo -e \"$BWHT
     KILLING SERVER
-\" ; kill -2 ${S_PID} }" &
+\" ; kill -2 $S_PID" &
 C_PID=$!
 
 for i in {1..10}; do
@@ -33,6 +33,7 @@ for i in {1..10}; do
 done
 
 wait $C_PID
+sleep 0.1
 
 echo -e $BWHT '
 

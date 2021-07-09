@@ -25,10 +25,14 @@ typedef struct
     size_t size;
 } evictedFile;
 
+int printEvictedPath(void *arg);
+
 int printEvicted(void *arg);
 
 void freeEvicted(void *arg);
 
 int storeFileInDir(evictedFile *f, const char *dirname);
+
+char *getAbsolutePath(const char *path);
 
 #endif

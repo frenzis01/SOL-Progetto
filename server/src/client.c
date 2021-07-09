@@ -1,14 +1,41 @@
-#include <client.h>
+#define _POSIX_C_SOURCE 200809L
 
+#include <utils.h>
+#include <parser.h>
+#include <clientApi.h>
+#include <queue.h>
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <errno.h>
+#include <time.h>
+#include <limits.h>
+#include <string.h>
+#include <sys/types.h>
+#include <dirent.h>
+
+#pragma region
 #define FILESYS_err (errno == EACCES || errno == ENOENT || errno == EADDRINUSE || errno == EFBIG || errno == EINVAL)
 #define ec_api(s)                                                                  \
     do                                                                             \
     {                                                                              \
         if (nanosleep(&interval, NULL) == (-1) || ((s) == (-1) && !(FILESYS_err))) \
         {                                                                          \
-            perror(#s);                                                            \
+            if (errno && errno != ECONNRESET && errno != ENOTCONN)                 \
+                perror(BRED #s REG);                                               \
             goto cleanup;                                                          \
         }                                                                          \
+    } while (0);
+
+#define ec_neg1_cli(s, c)                                          \
+    do                                                             \
+    {                                                              \
+        if ((s) == (-1))                                           \
+        {                                                          \
+            if (errno && errno != ENOTCONN && errno != ECONNRESET) \
+                perror(#s);                                        \
+            c;                                                     \
+        }                                                          \
     } while (0);
 
 #define GET_DFLAG                                                               \
@@ -30,13 +57,14 @@
         free(dirname);  \
         dirname = NULL; \
     } while (0);
+#pragma endregion
 
-char *getAbsolutePath(char *path);
 int writeFilesList(queue *files, const char *dirname);
 int readFilesList(queue *files, const char *dirname);
 int removeFilesList(queue *files);
 int lockFilesList(queue *files, _Bool lock);
 int getFilesFromDir(const char *dirname, int n, queue **plist);
+int hPresent(queue *oplist);
 
 struct timespec interval;
 
@@ -54,21 +82,24 @@ int main(int argc, char **argv)
     interval.tv_sec = 0;
 
     ec_neg1(parser(argc, argv, &options), goto cleanup);
+    if (hPresent(options))
+    {
+        printUsage(argv[0]);
+        freeOptionsList(&options);
+        return 0;
+    }
     while (!queueIsEmpty(options))
     {
         ec_z(op = queueDequeue(options), goto cleanup);
         switch (op->flag)
         {
-        case 'h':
-            printUsage(argv[0]);
-            break;
         case 'f': // SOCKET CONN
         {
             struct timespec expire;
             expire.tv_sec = time(NULL) + 60;
             // auto-expire after a 60s and retry every 100ms if 0 to avoid flooding
             strncpy(sockname, op->arg, PATH_MAX);
-            ec_neg1(openConnection(sockname, t ? t : 100, expire), goto cleanup);
+            ec_neg1_cli(openConnection(sockname, t ? t : 100, expire), goto cleanup);
             free(op->arg);
             break;
         }
@@ -81,8 +112,8 @@ int main(int argc, char **argv)
 
             int x = n ? *n : 0;
             free(n);
-            ec_neg1(getFilesFromDir(wDir, x, &args), goto cleanup);
-            ec_neg1(writeFilesList(args, dirname), goto cleanup);
+            ec_neg1_cli(getFilesFromDir(wDir, x, &args), goto cleanup);
+            ec_neg1_cli(writeFilesList(args, dirname), goto cleanup);
 
             free(wDir);
             args = NULL;
@@ -92,12 +123,12 @@ int main(int argc, char **argv)
         }
         case 'W': // SENDS F_LIST TO SERVER
             GET_DFLAG;
-            ec_neg1(writeFilesList(op->arg, dirname), goto cleanup);
+            ec_neg1_cli(writeFilesList(op->arg, dirname), goto cleanup);
             CLEAN_DFLAG;
             break;
         case 'r': // READS F_LIST FROM SERVER
             GET_DFLAG;
-            ec_neg1(readFilesList(op->arg, dirname), goto cleanup);
+            ec_neg1_cli(readFilesList(op->arg, dirname), goto cleanup);
             CLEAN_DFLAG;
             break;
         case 'R': // READS N FILES FROM SERVER
@@ -116,13 +147,13 @@ int main(int argc, char **argv)
             free(op->arg);
             break;
         case 'l': // ACQUIRES O_LOCK ON A F_LIST
-            ec_neg1(lockFilesList(op->arg, 1), goto cleanup);
+            ec_neg1_cli(lockFilesList(op->arg, 1), goto cleanup);
             break;
         case 'u': // RELEASES O_LOCK ON A F_LIST
-            ec_neg1(lockFilesList(op->arg, 0), goto cleanup);
+            ec_neg1_cli(lockFilesList(op->arg, 0), goto cleanup);
             break;
         case 'c': // REMOVES F_LIST FROM SERVER
-            ec_neg1(removeFilesList(op->arg), goto cleanup);
+            ec_neg1_cli(removeFilesList(op->arg), goto cleanup);
             break;
         case 'p': // ENABLES clientApi PRINTS
             pFlag = 1;
@@ -144,32 +175,12 @@ int main(int argc, char **argv)
 cleanup:
     closeConnection(sockname);
     free(op);
-    queueDestroy(options);
+    freeOptionsList(&options);
     queueDestroy(args);
     free(path);
     free(dirEvicted);
     free(dirname);
     return -1;
-}
-
-/**
- * If path is a relative path, frees path and returns corresponding absolute path
- */
-char *getAbsolutePath(char *path)
-{
-    if (!path)
-        return NULL;
-    if (path == strchr(path, '/')) // path is absolute
-        return path;
-    char cwd[PATH_MAX];
-    ec_z(getcwd(cwd, sizeof(cwd)), free(path); return NULL);
-    char *absPath = NULL;
-    ec_z(absPath = calloc(strnlen(path, PATH_MAX) + strnlen(cwd, PATH_MAX) + 2, sizeof(char)),
-         return NULL);
-    // strncat(absPath, cwd, PATH_MAX);
-    // strncat(absPath+strnlen(absPath,PATH_MAX), path, PATH_MAX);
-    ec_neg(snprintf(absPath, PATH_MAX, "%s/%s", cwd, path), return NULL);
-    return absPath;
 }
 
 /**
@@ -188,10 +199,8 @@ int writeFilesList(queue *files, const char *dirname)
         // if the option was "-d file1,,file2" strtok should have skipped both ',';
         // however, we can safely skip if, for some reason,
         // the queue contains a NULL string
-        ec_z(buf = queueDequeue(files), continue);
-        ec_z(path = getAbsolutePath(buf), goto cleanup);
-        free(buf);
-        buf = NULL;
+
+        ec_z(path = queueDequeue(files), continue);
 
         // TRY TO O_CREAT and O_LOCK THE FILE
         ec_api(res = openFile(path, _O_CREAT | _O_LOCK));
@@ -205,7 +214,7 @@ int writeFilesList(queue *files, const char *dirname)
             if (res == SUCCESS)
             {
                 size_t size;
-                ec_neg1(readFromDisk(path, (void **)&buf, &size), goto cleanup); // 'recycle' buf
+                ec_neg1(readFromDisk(path, (void **)&buf, &size), goto cleanup);
                 ec_api(appendToFile(path, buf, size, dirname));
                 free(buf);
                 buf = NULL;
@@ -243,11 +252,11 @@ int readFilesList(queue *files, const char *dirname)
     char *buf = NULL, *path = NULL;
     int res = 0;
     size_t size = 0;
-    evictedFile *f;
+    evictedFile *f = NULL;
     while (!queueIsEmpty(files))
     {
         ec_z(buf = queueDequeue(files), continue);
-        ec_z(path = getAbsolutePath(buf), goto cleanup);
+        ec_z(path = getAbsolutePath(buf), goto cleanup); // gonna need it to store on disk
         free(buf);
         buf = NULL;
 
@@ -260,21 +269,15 @@ int readFilesList(queue *files, const char *dirname)
             if (dirname)
             {
                 f = evictedWrap(path, buf, size);
-                ec_neg1(storeFileInDir(f, dirname), puts("REAAAAAAAAAAAD"); goto cleanup);
-                // freeEvicted(f);
-                free(path);
-                free(buf);
+                ec_neg1(storeFileInDir(f, dirname), goto cleanup);
                 free(f);
-                path = NULL;
-                buf = NULL;
                 f = NULL;
             }
         }
-        else
-        {
-            free(path);
-            path = NULL;
-        }
+        free(path);
+        free(buf);
+        path = NULL;
+        buf = NULL;
     }
     queueDestroy(files);
     return 0;
@@ -282,25 +285,19 @@ int readFilesList(queue *files, const char *dirname)
 cleanup:
     freeEvicted(f);
     queueDestroy(files);
-    // free(buf);
-    // free(path);
     return -1;
 }
 
 /**
  * Tries to set or remove O_LOCK from a list of file
  * @param files paths' list
- * @param lock 1 => lockFile, 0 => unlockFile
  */
 int removeFilesList(queue *files)
 {
-    char *buf = NULL, *path = NULL;
+    char *path = NULL;
     while (!queueIsEmpty(files))
     {
-        ec_z(buf = queueDequeue(files), continue);
-        ec_z(path = getAbsolutePath(buf), goto cleanup);
-        free(buf);
-        buf = NULL;
+        ec_z(path = queueDequeue(files), continue);
 
         // if set, removed file will be store in dirEvicted
         ec_api(lockFile(path));
@@ -313,9 +310,8 @@ int removeFilesList(queue *files)
     return 0;
 
 cleanup:
-    queueDestroy(files);
-    free(buf);
     free(path);
+    queueDestroy(files);
     return -1;
 }
 
@@ -326,15 +322,11 @@ cleanup:
  */
 int lockFilesList(queue *files, _Bool lock)
 {
-    char *buf = NULL, *path = NULL;
+    char *path = NULL;
     while (!queueIsEmpty(files))
     {
-        ec_z(buf = queueDequeue(files), continue);
-        ec_z(path = getAbsolutePath(buf), goto cleanup);
-        free(buf);
-        buf = NULL;
+        ec_z(path = queueDequeue(files), continue);
 
-        // TRY TO O_CREAT and O_LOCK THE FILE
         if (lock)
         {
             ec_api(lockFile(path));
@@ -351,8 +343,8 @@ int lockFilesList(queue *files, _Bool lock)
     return 0;
 
 cleanup:
-    free(buf);
     free(path);
+    queueDestroy(files);
     return -1;
 }
 
@@ -387,7 +379,7 @@ int getFilesFromDir(const char *dirname, int n, queue **plist)
 
     queue *subDir = NULL;
     char *curr = NULL;
-    while ((all || n--) && (file = readdir(dir)) != NULL)
+    while ((all || n) && (file = readdir(dir)) != NULL)
     {
         struct stat s;
         ec_z(path = catPaths(dirname, file->d_name), goto cleanup);
@@ -407,6 +399,7 @@ int getFilesFromDir(const char *dirname, int n, queue **plist)
             {
                 ec_neg1(queueEnqueue(*plist, curr), goto cleanup);
                 curr = queueDequeue(subDir);
+                n--;
             }
             queueDestroy(subDir);
             subDir = NULL;
@@ -415,6 +408,7 @@ int getFilesFromDir(const char *dirname, int n, queue **plist)
         else if (S_ISREG(s.st_mode))
         {
             ec_neg1(queueEnqueue(*plist, path), goto cleanup);
+            n--;
         }
     }
     ec_neg1(closedir(dir), goto cleanup);
@@ -430,4 +424,17 @@ cleanup:
     if (dir)
         closedir(dir);
     return -1;
+}
+
+/**
+ * @returns 1 if 'h' is present in the given options queue, 0 otherwise
+ */
+int hPresent(queue *oplist)
+{
+    Option h;
+    h.flag = 'h';
+
+    if (queueFind(oplist, &h, cmpFlagOption))
+        return 1;
+    return 0;
 }

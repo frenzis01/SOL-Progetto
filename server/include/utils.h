@@ -25,6 +25,11 @@
 #define BCYN "\033[1;36m"
 #define BWHT "\033[1;37m"
 
+
+// Logger buf dim
+#define LOGBUF_LEN 400
+#define ERRNOBUF_LEN 200
+
 #define ec(s, r, c)     \
     do                  \
     {                   \

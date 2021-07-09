@@ -12,15 +12,17 @@
         return -1;                                             \
     }
 
-#define ec_n_EOF(s, r, c)          \
-    do                             \
-    {                              \
-        if ((s) != (r))            \
-        {                          \
-            if (errno != ECONNRESET) \
-                perror(#s);        \
-            c;                     \
-        }                          \
+#define ec_n_EOF(s, r, c)                                   \
+    do                                                      \
+    {                                                       \
+        if ((s) != (r))                                     \
+        {                                                   \
+            if (errno == ECONNRESET || errno == ENOTCONN)   \
+                puts("\tServer went down. Disconnecting..."); \
+            else                                            \
+                perror(#s);                                 \
+            c;                                              \
+        }                                                   \
     } while (0);
 
 char skname[PATH_MAX] = ""; // active connection
@@ -61,13 +63,14 @@ int openConnection(const char *sockname, int msec, const struct timespec abstime
     while (connect(skfd, (struct sockaddr *)&sa, sizeof(sa)) == -1)
     {
         time_t curr = time(NULL); // time_t equals long
+        ec_z(curr, return .1);
         p(printf("Socket not found. Trying again in %dmsec\n", msec));
         if (curr > abstime.tv_sec)
         {
             errno = ETIME;
             return -1; // time expired
         }
-        nanosleep(&interval, NULL);
+        ec_neg1(nanosleep(&interval, NULL), return -1);
     }
     strncpy(skname, sockname, UNIX_PATH_MAX);
     return 0;
@@ -89,19 +92,22 @@ int closeConnection(const char *sockname)
  */
 int openFile(const char *pathname, int flags)
 {
-    if ((flags < 0 || flags > 3) || !pathname || (strchr(pathname, '/') != pathname))
+    if ((flags < 0 || flags > 3) || !pathname)
     {
         p(puts(BRED "Invalid argument" REG))
             errno = EINVAL;
         return -1;
     }
-    p(printf("openFile__%s__%d: ", pathname, flags));
+    char *path = NULL;
+    ec_z(path = getAbsolutePath(pathname), return -1);
+    p(printf("openFile__%s__%d: ", path, flags));
     // SEND REQUEST
-    unsigned short pathLen = strnlen(pathname, PATH_MAX);
+    unsigned short pathLen = strnlen(path, PATH_MAX);
     size_t reqLen = REQ_LEN_SIZE + pathLen * sizeof(char);
     const char cflags = flags;
     char *req;
-    ec_z(req = genRequest(reqLen, OPEN_FILE, cflags, 0, pathLen, 0, 0, pathname, "", ""), return -1);
+    ec_z(req = genRequest(reqLen, OPEN_FILE, cflags, 0, pathLen, 0, 0, path, "", ""), free(path); return -1);
+    free(path);
     ec_n(writen(skfd, req, reqLen), reqLen, free(req); return -1);
     free(req);
 
@@ -117,7 +123,7 @@ int openFile(const char *pathname, int flags)
     {
         evictedFile *fptr = readEvicted();
         ec_z(fptr, return -1);
-        p(ec_neg1(printEvicted(fptr), freeEvicted(fptr); return -1););
+        p(ec_neg1(printEvictedPath(fptr), freeEvicted(fptr); return -1););
         if (dirEvicted)
         {
             storeFileInDir(fptr, dirEvicted);
@@ -136,18 +142,21 @@ int openFile(const char *pathname, int flags)
  */
 int readFile(const char *pathname, void **buf, size_t *size)
 {
-    if (!pathname || (strchr(pathname, '/') != pathname))
+    if (!pathname)
     {
         p(puts(BRED "Invalid argument" REG))
             errno = EINVAL;
         return -1;
     }
-    p(printf("readFile__%s: ", pathname));
+    char *path = NULL;
+    ec_z(path = getAbsolutePath(pathname), return -1);
+    p(printf("readFile__%s: ", path));
     // SEND REQUEST
-    unsigned short pathLen = strnlen(pathname, PATH_MAX);
+    unsigned short pathLen = strnlen(path, PATH_MAX);
     size_t reqLen = REQ_LEN_SIZE + pathLen * sizeof(char);
     char *req;
-    ec_z(req = genRequest(reqLen, READ_FILE, 0, 0, pathLen, 0, 0, pathname, "", ""), return -1);
+    ec_z(req = genRequest(reqLen, READ_FILE, 0, 0, pathLen, 0, 0, path, "", ""), free(path); return -1);
+    free(path);
     ec_n(writen(skfd, req, reqLen), reqLen, free(req); return -1);
     free(req);
 
@@ -160,7 +169,7 @@ int readFile(const char *pathname, void **buf, size_t *size)
     {
         evictedFile *fptr = readEvicted();
         ec_z(fptr, return -1);
-        p(ec_neg1(printEvicted(fptr), freeEvicted(fptr); return -1));
+        p(ec_neg1(printEvictedPath(fptr), freeEvicted(fptr); return -1));
 
         // copy evicted's content in buf
         ec_z(*buf = malloc(sizeof(char) * fptr->size), freeEvicted(fptr); return -1);
@@ -206,7 +215,7 @@ int readNFiles(int N, const char *dirname)
     {
         evictedFile *fptr = readEvicted();
         ec_z(fptr, return -1);
-        p(ec_neg1(printEvicted(fptr), freeEvicted(fptr); return -1));
+        p(ec_neg1(printEvictedPath(fptr), freeEvicted(fptr); return -1));
 
         storeFileInDir(fptr, dirname);
         p(printf("File stored in %s\n", dirname));
@@ -222,13 +231,15 @@ int readNFiles(int N, const char *dirname)
  */
 int writeFile(const char *pathname, const char *dirname)
 {
-    if (!pathname || (strchr(pathname, '/') != pathname))
+    if (!pathname)
     {
         p(puts(BRED "Invalid argument" REG))
             errno = EINVAL;
         return -1;
     }
-    p(printf("writeFile__%s__%s: ", pathname, dirname));
+    char *path = NULL;
+    ec_z(path = getAbsolutePath(pathname), return -1);
+    p(printf("writeFile__%s__%s: ", path, dirname));
 
     // READ FROM DISK
     void *buf = NULL;
@@ -236,13 +247,14 @@ int writeFile(const char *pathname, const char *dirname)
     ec_neg1(readFromDisk(pathname, &buf, &size), return -1);
 
     // SEND REQUEST
-    unsigned short pathLen = strnlen(pathname, PATH_MAX);
+    unsigned short pathLen = strnlen(path, PATH_MAX);
     unsigned short dirnameLen = 0;
     dirnameLen = dirname ? strnlen(dirname, PATH_MAX) : 0;
     size_t reqLen = REQ_LEN_SIZE + pathLen * sizeof(char) + dirnameLen * sizeof(char) + size;
     char *req;
 
-    ec_z(req = genRequest(reqLen, WRITE_FILE, 0, 0, pathLen, dirnameLen, size, pathname, dirname, buf), free(buf); return -1);
+    ec_z(req = genRequest(reqLen, WRITE_FILE, 0, 0, pathLen, dirnameLen, size, path, dirname, buf), free(buf); free(path); return -1);
+    free(path);
     ec_n(writen(skfd, req, reqLen), reqLen, free(req); free(buf); return -1);
     free(req);
     free(buf);
@@ -258,7 +270,7 @@ int writeFile(const char *pathname, const char *dirname)
     {
         evictedFile *fptr = readEvicted();
         ec_z(fptr, return -1);
-        p(ec_neg1(printEvicted(fptr), freeEvicted(fptr); return -1));
+        p(ec_neg1(printEvictedPath(fptr), freeEvicted(fptr); return -1));
         if (dirname)
         {
             storeFileInDir(fptr, dirname);
@@ -278,21 +290,24 @@ int writeFile(const char *pathname, const char *dirname)
  */
 int appendToFile(const char *pathname, void *buf, size_t size, const char *dirname)
 {
-    if (!pathname || !buf || (strchr(pathname, '/') != pathname))
+    if (!pathname || !buf)
     {
         p(puts(BRED "Invalid argument" REG))
             errno = EINVAL;
         return -1;
     }
-    p(printf("appendToFile__%s__%ld__%s: ", pathname, size, dirname));
+    char *path = NULL;
+    ec_z(path = getAbsolutePath(pathname), return -1);
+    p(printf("appendToFile__%s__%ld__%s: ", path, size, dirname));
     // SEND REQUEST
-    unsigned short pathLen = strnlen(pathname, PATH_MAX);
+    unsigned short pathLen = strnlen(path, PATH_MAX);
     unsigned short dirnameLen = 0;
     // dirname ? dirnameLen=strnlen(dirname, PATH_MAX) : dirname;
     dirnameLen = dirname ? strnlen(dirname, PATH_MAX) : 0;
     size_t reqLen = REQ_LEN_SIZE + pathLen * sizeof(char) + dirnameLen * sizeof(char) + size;
     char *req;
-    ec_z(req = genRequest(reqLen, APPEND, 0, 0, pathLen, dirnameLen, size, pathname, dirname, buf), return -1);
+    ec_z(req = genRequest(reqLen, APPEND, 0, 0, pathLen, dirnameLen, size, path, dirname, buf), free(path); return -1);
+    free(path);
     ec_n(writen(skfd, req, reqLen), reqLen, free(req); return -1);
     free(req);
 
@@ -307,7 +322,7 @@ int appendToFile(const char *pathname, void *buf, size_t size, const char *dirna
     {
         evictedFile *fptr = readEvicted();
         ec_z(fptr, return -1);
-        p(ec_neg1(printEvicted(fptr), freeEvicted(fptr); return -1));
+        p(ec_neg1(printEvictedPath(fptr), freeEvicted(fptr); return -1));
         if (dirname)
         {
             storeFileInDir(fptr, dirname);
@@ -325,18 +340,21 @@ int appendToFile(const char *pathname, void *buf, size_t size, const char *dirna
  */
 int lockFile(const char *pathname)
 {
-    if (!pathname || (strchr(pathname, '/') != pathname))
+    if (!pathname)
     {
         p(puts(BRED "Invalid argument" REG))
             errno = EINVAL;
         return -1;
     }
-    p(printf("lockFile__%s: ", pathname));
+    char *path = NULL;
+    ec_z(path = getAbsolutePath(pathname), return -1);
+    p(printf("lockFile__%s: ", path));
     // SEND REQUEST
-    unsigned short pathLen = strnlen(pathname, PATH_MAX);
+    unsigned short pathLen = strnlen(path, PATH_MAX);
     size_t reqLen = REQ_LEN_SIZE + pathLen * sizeof(char);
     char *req;
-    ec_z(req = genRequest(reqLen, LOCK_FILE, 0, 0, pathLen, 0, 0, pathname, "", ""), return -1);
+    ec_z(req = genRequest(reqLen, LOCK_FILE, 0, 0, pathLen, 0, 0, path, "", ""), free(path); return -1);
+    free(path);
     ec_n(writen(skfd, req, reqLen), reqLen, free(req); return -1);
     free(req);
 
@@ -356,18 +374,21 @@ int lockFile(const char *pathname)
  */
 int unlockFile(const char *pathname)
 {
-    if (!pathname || (strchr(pathname, '/') != pathname))
+    if (!pathname)
     {
         p(puts(BRED "Invalid argument" REG))
             errno = EINVAL;
         return -1;
     }
-    p(printf("unlockFile__%s: ", pathname));
+    char *path = NULL;
+    ec_z(path = getAbsolutePath(pathname), return -1);
+    p(printf("unlockFile__%s: ", path));
     // SEND REQUEST
-    unsigned short pathLen = strnlen(pathname, PATH_MAX);
+    unsigned short pathLen = strnlen(path, PATH_MAX);
     size_t reqLen = REQ_LEN_SIZE + pathLen * sizeof(char);
     char *req;
-    ec_z(req = genRequest(reqLen, UNLOCK_FILE, 0, 0, pathLen, 0, 0, pathname, "", ""), return -1);
+    ec_z(req = genRequest(reqLen, UNLOCK_FILE, 0, 0, pathLen, 0, 0, path, "", ""), free(path); return -1);
+    free(path);
     ec_n(writen(skfd, req, reqLen), reqLen, free(req); return -1);
     free(req);
 
@@ -386,18 +407,21 @@ int unlockFile(const char *pathname)
  */
 int closeFile(const char *pathname)
 {
-    if (!pathname || (strchr(pathname, '/') != pathname))
+    if (!pathname)
     {
         p(puts(BRED "Invalid argument" REG))
             errno = EINVAL;
         return -1;
     }
-    p(printf("closeFile__%s: ", pathname));
+    char *path = NULL;
+    ec_z(path = getAbsolutePath(pathname), return -1);
+    p(printf("closeFile__%s: ", path));
     // SEND REQUEST
-    unsigned short pathLen = strnlen(pathname, PATH_MAX);
+    unsigned short pathLen = strnlen(path, PATH_MAX);
     size_t reqLen = REQ_LEN_SIZE + pathLen * sizeof(char);
     char *req;
-    ec_z(req = genRequest(reqLen, CLOSE_FILE, 0, 0, pathLen, 0, 0, pathname, "", ""), return -1);
+    ec_z(req = genRequest(reqLen, CLOSE_FILE, 0, 0, pathLen, 0, 0, path, "", ""), free(path); return -1);
+    free(path);
     ec_n(writen(skfd, req, reqLen), reqLen, free(req); return -1);
     free(req);
 
@@ -416,18 +440,21 @@ int closeFile(const char *pathname)
  */
 int removeFile(const char *pathname)
 {
-    if (!pathname || (strchr(pathname, '/') != pathname))
+    if (!pathname)
     {
         p(puts(BRED "Invalid argument" REG))
             errno = EINVAL;
         return -1;
     }
-    p(printf("removeFile__%s: ", pathname));
+    char *path = NULL;
+    ec_z(path = getAbsolutePath(pathname), return -1);
+    p(printf("removeFile__%s: ", path));
     // SEND REQUEST
-    unsigned short pathLen = strnlen(pathname, PATH_MAX);
+    unsigned short pathLen = strnlen(path, PATH_MAX);
     size_t reqLen = REQ_LEN_SIZE + pathLen * sizeof(char);
     char *req;
-    ec_z(req = genRequest(reqLen, REMOVE_FILE, 0, 0, pathLen, 0, 0, pathname, "", ""), return -1);
+    ec_z(req = genRequest(reqLen, REMOVE_FILE, 0, 0, pathLen, 0, 0, path, "", ""), free(path); return -1);
+    free(path);
     ec_n(writen(skfd, req, reqLen), reqLen, free(req); return -1);
     free(req);
 
@@ -441,7 +468,7 @@ int removeFile(const char *pathname)
     {
         evictedFile *fptr = readEvicted();
         ec_z(fptr, return -1);
-        p(ec_neg1(printEvicted(fptr), freeEvicted(fptr); return -1););
+        p(ec_neg1(printEvictedPath(fptr), freeEvicted(fptr); return -1););
         if (dirEvicted)
         {
             storeFileInDir(fptr, dirEvicted);

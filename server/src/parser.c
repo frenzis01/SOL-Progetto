@@ -1,29 +1,28 @@
 #define _POSIX_C_SOURCE 200809L
 #include <parser.h>
 
-#define CHK_MULT(o)                                                                            \
-    if (queueFind(opQ, &op, NULL))                                                             \
-    {                                                                                          \
+#define CHK_MULT(o)                                                     \
+    if (queueFind(opQ, &op, NULL))                                      \
+    {                                                                   \
         puts(BRED "Option -" #o " is specified multiple times.\n" REG); \
-        /*printUsage(argv[0]);*/                                                               \
-        return -1;                                                                             \
+        return -1;                                                      \
     }
 
-#define CHK_PREV_W                                                                                      \
-        if (!(*opList)->tail || (((Option *)((*opList)->tail->data))->flag != 'w' &&                    \
-                                 ((Option *)((*opList)->tail->data))->flag != 'W'))                     \
-        {                                                                                               \
-            puts(BRED "Option -D requires -W or -w as precedent option.\n" REG); \
-            continue;                                                                                   \
-        }                                                                                               \
+#define CHK_PREV_W                                                               \
+    if (!(*opList)->tail || (((Option *)((*opList)->tail->data))->flag != 'w' && \
+                             ((Option *)((*opList)->tail->data))->flag != 'W'))  \
+    {                                                                            \
+        puts(BRED "Option -D requires -W or -w as precedent option.\n" REG);     \
+        continue;                                                                \
+    }
 
-#define CHK_PREV_R                                                                                      \
-        if (!(*opList)->tail || (((Option *)((*opList)->tail->data))->flag != 'r' &&                    \
-                                 ((Option *)((*opList)->tail->data))->flag != 'R'))                     \
-        {                                                                                               \
-            puts(BRED "Option -d requires -R or -r as precedent option.\n" REG); \
-            continue;                                                                                   \
-        }                                                                                               \
+#define CHK_PREV_R                                                               \
+    if (!(*opList)->tail || (((Option *)((*opList)->tail->data))->flag != 'r' && \
+                             ((Option *)((*opList)->tail->data))->flag != 'R'))  \
+    {                                                                            \
+        puts(BRED "Option -d requires -R or -r as precedent option.\n" REG);     \
+        continue;                                                                \
+    }
 
 int storeArgs(queue **res, char *args);
 
@@ -95,7 +94,8 @@ int parser(int argc, char **argv, queue **opList)
                 }
                 free(bkp);
             }
-            if (!optarg){   // make sure op->arg is NULL in this case
+            if (!optarg)
+            { // make sure op->arg is NULL in this case
                 free(op->arg);
                 op->arg = NULL;
             }
@@ -111,7 +111,8 @@ int parser(int argc, char **argv, queue **opList)
                 free(op);
                 continue;
             }
-            if (!optarg){   // make sure op->arg is NULL in this case
+            if (!optarg)
+            { // make sure op->arg is NULL in this case
                 free(op->arg);
                 op->arg = NULL;
             }
@@ -187,7 +188,7 @@ int parser(int argc, char **argv, queue **opList)
 parser_cleanup:
     free(op);
     op = NULL;
-    queueDestroy(*opList);
+    freeOptionsList(opList);
     return -1;
 }
 
@@ -255,8 +256,6 @@ storeArgs_cleanup:
 }
 
 
-
-// TODO "  -E,\tSets the default eviction dir. If no dir is specified removes the current default dir"
 /**
  * Print the usage of this program
  * @param exe: the name of the executable
@@ -305,4 +304,42 @@ void freeQueueOption(void *arg)
     queueDestroy((queue *)(o->arg));
     o->arg = NULL;
     free(arg);
+}
+
+/**
+ * Correctly frees an option list, along with options arguments.
+ */
+int freeOptionsList(queue **oplist)
+{
+    Option *op = NULL;
+    while (!queueIsEmpty(*oplist))
+    {
+        ec_z(op = queueDequeue(*oplist), return -1);
+        switch (op->flag)
+        {
+        case 'W':
+        case 'r':
+        case 'l':
+        case 'u':
+        case 'c':
+        case 'w':
+            freeQueueOption(op);
+            break;
+
+        case 'D':
+        case 'f':
+        case 'd':
+        case 'R':
+        case 't':
+        case 'E':
+        case 'p':
+        case 'h':
+        default:;
+            freeSimpleOption(op);
+            break;
+        }
+    }
+    queueDestroy(*oplist);
+    *oplist = NULL;
+    return 0;
 }

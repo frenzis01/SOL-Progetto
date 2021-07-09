@@ -19,10 +19,10 @@
 #include <stdlib.h>
 #include <time.h>
 
-#define ANSI_COLOR_CYAN "\x1b[36m"
-#define ANSI_COLOR_RESET "\x1b[0m"
-#define MSG_PERROR(s) perror(ANSI_COLOR_CYAN s ANSI_COLOR_RESET);
-#define ONLY_MSG_ERR ANSI_COLOR_CYAN "INTERNAL" ANSI_COLOR_RESET
+#define BCYN "\x1b[36m"
+#define REG "\x1b[0m"
+#define MSG_PERROR(s) perror(BCYN s REG);
+#define ONLY_MSG_ERR BCYN "INTERNAL" REG
 
 // READ CONFIG FILE
 // #define TEST_LOG
@@ -40,7 +40,7 @@
     strerror_r(errno, buf, 200);                                         \
     if (res == -1)                                                       \
     {                                                                    \
-        perror(ANSI_COLOR_CYAN "INTERNAL FATAL ERROR" ANSI_COLOR_RESET); \
+        perror(BCYN "INTERNAL FATAL ERROR" REG); \
         exit(EXIT_FAILURE);                                              \
     }                                                                    \
     sprintf(ret, "%d__%d__" #s "__%s", i, res, buf);                     \
@@ -183,7 +183,7 @@ void *fakeWorker(void *arg)
             strerror_r(errno, buf, 200);
             if (!notify)
             {
-                perror(ANSI_COLOR_CYAN "INTERNAL FATAL ERROR" ANSI_COLOR_RESET);
+                perror(BCYN "INTERNAL FATAL ERROR" REG);
                 exit(EXIT_FAILURE);
             }
             res = 0;

@@ -66,7 +66,7 @@ int main(int argc, char **argv)
         {
             struct timespec expire;
             expire.tv_sec = time(NULL) + 60;
-            // TODO OK? auto-expire after a 60s and 100ms if 0 to avoid flooding?
+            // auto-expire after a 60s and retry every 100ms if 0 to avoid flooding
             strncpy(sockname, op->arg, PATH_MAX);
             ec_neg1(openConnection(sockname, t ? t : 100, expire), goto cleanup);
             free(op->arg);
@@ -97,7 +97,7 @@ int main(int argc, char **argv)
             break;
         case 'r': // READS F_LIST FROM SERVER
             GET_DFLAG;
-            readFilesList(op->arg, dirname);
+            ec_neg1(readFilesList(op->arg, dirname), goto cleanup);
             CLEAN_DFLAG;
             break;
         case 'R': // READS N FILES FROM SERVER
@@ -116,13 +116,13 @@ int main(int argc, char **argv)
             free(op->arg);
             break;
         case 'l': // ACQUIRES O_LOCK ON A F_LIST
-            lockFilesList(op->arg, 1);
+            ec_neg1(lockFilesList(op->arg, 1), goto cleanup);
             break;
         case 'u': // RELEASES O_LOCK ON A F_LIST
-            lockFilesList(op->arg, 0);
+            ec_neg1(lockFilesList(op->arg, 0), goto cleanup);
             break;
         case 'c': // REMOVES F_LIST FROM SERVER
-            removeFilesList(op->arg);
+            ec_neg1(removeFilesList(op->arg), goto cleanup);
             break;
         case 'p': // ENABLES clientApi PRINTS
             pFlag = 1;
@@ -138,20 +138,17 @@ int main(int argc, char **argv)
         free(path);
         args = NULL;
         path = NULL;
+        op = NULL;
     }
 
-    closeConnection(sockname);
-    queueDestroy(options);
-    free(dirEvicted);
-    free(dirname);
-    return 0;
-
 cleanup:
+    closeConnection(sockname);
     free(op);
     queueDestroy(options);
     queueDestroy(args);
     free(path);
     free(dirEvicted);
+    free(dirname);
     return -1;
 }
 
@@ -269,7 +266,7 @@ int readFilesList(queue *files, const char *dirname)
                 free(buf);
                 free(f);
                 path = NULL;
-                buf= NULL;
+                buf = NULL;
                 f = NULL;
             }
         }
@@ -306,7 +303,7 @@ int removeFilesList(queue *files)
         buf = NULL;
 
         // if set, removed file will be store in dirEvicted
-        ec_api(lockFile(path)); // TODO ok?
+        ec_api(lockFile(path));
         ec_api(removeFile(path));
 
         free(path);
@@ -358,14 +355,6 @@ cleanup:
     free(path);
     return -1;
 }
-
-// int specialDir(const char *path)
-// {
-//     char *fname = strrchr(path, '/');
-//     if (!strncmp(fname, "/..", PATH_MAX) || !strncmp(fname, "/.", PATH_MAX))
-//         return 1;
-//     return 0;
-// }
 
 int specialDir(const char *name)
 {
@@ -423,11 +412,8 @@ int getFilesFromDir(const char *dirname, int n, queue **plist)
             subDir = NULL;
             curr = NULL;
         }
-        else
+        else if (S_ISREG(s.st_mode))
         {
-            // ec_z(path = malloc((dirLen + strnlen(file->d_name, PATH_MAX) + 2) * sizeof(char)), goto cleanup);
-            // ec_neg(snprintf(path, PATH_MAX, "%s/%s", dirname, file->d_name), goto cleanup);
-            // ec_z(path = catPaths(dirname, file->d_name), goto cleanup);
             ec_neg1(queueEnqueue(*plist, path), goto cleanup);
         }
     }

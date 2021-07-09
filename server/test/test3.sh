@@ -1,5 +1,5 @@
 #!/bin/bash
-#TEST2 (aka eviction test)
+#TEST3 (aka stress test)
 BWHT="\033[1;37m"
 REG="\x1b[0m"
 
@@ -23,15 +23,9 @@ STARTING SERVER $S_PID
 sleep 2
 
 #hide kill termination message using redirection
-bash -c "sleep 30 ; killall -9 spawnclients.sh > /dev/null; echo -e '
-
-
-
-KILLING SERVER
-
-
-
-' ; kill -2 server $S_PID }" &
+bash -c "sleep 30 ; killall -9 spawnclients.sh> /dev/null; echo -e \"$BWHT
+    KILLING SERVER
+\" ; kill -2 ${S_PID} }" &
 C_PID=$!
 
 for i in {1..10}; do
@@ -42,6 +36,6 @@ wait $C_PID
 
 echo -e $BWHT '
 
-Well done!
+    Well done!
 
 ' $REG

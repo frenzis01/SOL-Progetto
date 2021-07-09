@@ -12,10 +12,10 @@
 #include <math.h> // calculate size_t->char[] len
 #include <assert.h>
 
-#define ANSI_COLOR_CYAN "\x1b[36m"
-#define ANSI_COLOR_RESET "\x1b[0m"
-#define MSG_PERROR(s) perror(ANSI_COLOR_CYAN s ANSI_COLOR_RESET);
-#define ONLY_MSG_ERR ANSI_COLOR_CYAN "INTERNAL" ANSI_COLOR_RESET
+#define BCYN "\x1b[36m"
+#define REG "\x1b[0m"
+#define MSG_PERROR(s) perror(BCYN s REG);
+#define ONLY_MSG_ERR BCYN "INTERNAL" REG
 
 #define TEST_FILESYS
 

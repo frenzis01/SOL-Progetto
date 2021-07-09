@@ -12,6 +12,17 @@
         return -1;                                             \
     }
 
+#define ec_n_EOF(s, r, c)          \
+    do                             \
+    {                              \
+        if ((s) != (r))            \
+        {                          \
+            if (errno != ECONNRESET) \
+                perror(#s);        \
+            c;                     \
+        }                          \
+    } while (0);
+
 char skname[PATH_MAX] = ""; // active connection
 int skfd = 0;
 
@@ -80,7 +91,7 @@ int openFile(const char *pathname, int flags)
 {
     if ((flags < 0 || flags > 3) || !pathname || (strchr(pathname, '/') != pathname))
     {
-        p(puts(ANSI_COLOR_RED "Invalid argument" ANSI_COLOR_RESET))
+        p(puts(BRED "Invalid argument" REG))
             errno = EINVAL;
         return -1;
     }
@@ -97,8 +108,8 @@ int openFile(const char *pathname, int flags)
     // GET RESPONSE
     int res = 0;
     size_t nEvicted = 0;
-    ec_n(readn(skfd, &res, sizeof(int)), sizeof(int), return -1);
-    ec_n(readn(skfd, &nEvicted, sizeof(size_t)), sizeof(size_t), return -1);
+    ec_n_EOF(readn(skfd, &res, sizeof(int)), sizeof(int), return -1);
+    ec_n_EOF(readn(skfd, &nEvicted, sizeof(size_t)), sizeof(size_t), return -1);
 
     p(puts(strerror(res)));
 
@@ -127,7 +138,7 @@ int readFile(const char *pathname, void **buf, size_t *size)
 {
     if (!pathname || (strchr(pathname, '/') != pathname))
     {
-        p(puts(ANSI_COLOR_RED "Invalid argument" ANSI_COLOR_RESET))
+        p(puts(BRED "Invalid argument" REG))
             errno = EINVAL;
         return -1;
     }
@@ -142,7 +153,7 @@ int readFile(const char *pathname, void **buf, size_t *size)
 
     // GET RESPONSE
     int res = 0;
-    ec_n(readn(skfd, &res, sizeof(int)), sizeof(int), return -1);
+    ec_n_EOF(readn(skfd, &res, sizeof(int)), sizeof(int), return -1);
     p(puts(strerror(res)));
 
     if (res == SUCCESS) // SUCCESS
@@ -171,7 +182,7 @@ int readNFiles(int N, const char *dirname)
 {
     if (!dirname)
     {
-        p(puts(ANSI_COLOR_RED "Invalid argument" ANSI_COLOR_RESET))
+        p(puts(BRED "Invalid argument" REG))
             errno = EINVAL;
         return -1;
     }
@@ -186,7 +197,7 @@ int readNFiles(int N, const char *dirname)
 
     // GET RESPONSE
     size_t nread;
-    ec_n(readn(skfd, &nread, sizeof(size_t)), sizeof(size_t), return -1);
+    ec_n_EOF(readn(skfd, &nread, sizeof(size_t)), sizeof(size_t), return -1);
     p(puts(strerror(0)));
 
     // note: if the 'server-sided' readNfiles fails, nread = 0
@@ -213,7 +224,7 @@ int writeFile(const char *pathname, const char *dirname)
 {
     if (!pathname || (strchr(pathname, '/') != pathname))
     {
-        p(puts(ANSI_COLOR_RED "Invalid argument" ANSI_COLOR_RESET))
+        p(puts(BRED "Invalid argument" REG))
             errno = EINVAL;
         return -1;
     }
@@ -239,8 +250,8 @@ int writeFile(const char *pathname, const char *dirname)
     // GET RESPONSE
     int res = 0;
     size_t nEvicted = 0;
-    ec_n(readn(skfd, &res, sizeof(int)), sizeof(int), return -1);
-    ec_n(readn(skfd, &nEvicted, sizeof(size_t)), sizeof(size_t), return -1);
+    ec_n_EOF(readn(skfd, &res, sizeof(int)), sizeof(int), return -1);
+    ec_n_EOF(readn(skfd, &nEvicted, sizeof(size_t)), sizeof(size_t), return -1);
     p(puts(strerror(res)));
 
     while (nEvicted--)
@@ -269,7 +280,7 @@ int appendToFile(const char *pathname, void *buf, size_t size, const char *dirna
 {
     if (!pathname || !buf || (strchr(pathname, '/') != pathname))
     {
-        p(puts(ANSI_COLOR_RED "Invalid argument" ANSI_COLOR_RESET))
+        p(puts(BRED "Invalid argument" REG))
             errno = EINVAL;
         return -1;
     }
@@ -288,8 +299,8 @@ int appendToFile(const char *pathname, void *buf, size_t size, const char *dirna
     // GET RESPONSE
     int res = 0;
     size_t nEvicted = 0;
-    ec_n(readn(skfd, &res, sizeof(int)), sizeof(int), return -1);
-    ec_n(readn(skfd, &nEvicted, sizeof(size_t)), sizeof(size_t), return -1);
+    ec_n_EOF(readn(skfd, &res, sizeof(int)), sizeof(int), return -1);
+    ec_n_EOF(readn(skfd, &nEvicted, sizeof(size_t)), sizeof(size_t), return -1);
     p(puts(strerror(res)));
 
     while (nEvicted--)
@@ -316,7 +327,7 @@ int lockFile(const char *pathname)
 {
     if (!pathname || (strchr(pathname, '/') != pathname))
     {
-        p(puts(ANSI_COLOR_RED "Invalid argument" ANSI_COLOR_RESET))
+        p(puts(BRED "Invalid argument" REG))
             errno = EINVAL;
         return -1;
     }
@@ -331,7 +342,7 @@ int lockFile(const char *pathname)
 
     // GET RESPONSE
     int res = 0;
-    ec_n(readn(skfd, &res, sizeof(int)), sizeof(int), return -1);
+    ec_n_EOF(readn(skfd, &res, sizeof(int)), sizeof(int), return -1);
 
     p(puts(strerror(res)));
 
@@ -347,7 +358,7 @@ int unlockFile(const char *pathname)
 {
     if (!pathname || (strchr(pathname, '/') != pathname))
     {
-        p(puts(ANSI_COLOR_RED "Invalid argument" ANSI_COLOR_RESET))
+        p(puts(BRED "Invalid argument" REG))
             errno = EINVAL;
         return -1;
     }
@@ -362,7 +373,7 @@ int unlockFile(const char *pathname)
 
     // GET RESPONSE
     int res = 0;
-    ec_n(readn(skfd, &res, sizeof(int)), sizeof(int), return -1);
+    ec_n_EOF(readn(skfd, &res, sizeof(int)), sizeof(int), return -1);
 
     p(puts(strerror(res)));
 
@@ -377,7 +388,7 @@ int closeFile(const char *pathname)
 {
     if (!pathname || (strchr(pathname, '/') != pathname))
     {
-        p(puts(ANSI_COLOR_RED "Invalid argument" ANSI_COLOR_RESET))
+        p(puts(BRED "Invalid argument" REG))
             errno = EINVAL;
         return -1;
     }
@@ -392,7 +403,7 @@ int closeFile(const char *pathname)
 
     // GET RESPONSE
     int res = 0;
-    ec_n(readn(skfd, &res, sizeof(int)), sizeof(int), return -1);
+    ec_n_EOF(readn(skfd, &res, sizeof(int)), sizeof(int), return -1);
 
     p(puts(strerror(res)));
 
@@ -407,7 +418,7 @@ int removeFile(const char *pathname)
 {
     if (!pathname || (strchr(pathname, '/') != pathname))
     {
-        p(puts(ANSI_COLOR_RED "Invalid argument" ANSI_COLOR_RESET))
+        p(puts(BRED "Invalid argument" REG))
             errno = EINVAL;
         return -1;
     }
@@ -422,7 +433,7 @@ int removeFile(const char *pathname)
 
     // GET RESPONSE
     int res = 0;
-    ec_n(readn(skfd, &res, sizeof(int)), sizeof(int), return -1);
+    ec_n_EOF(readn(skfd, &res, sizeof(int)), sizeof(int), return -1);
 
     p(puts(strerror(res)));
 
@@ -487,11 +498,11 @@ evictedFile *readEvicted()
     f->path = NULL;
     f->content = NULL;
     size_t pathLen;
-    ec_n(readn(skfd, &pathLen, sizeof(size_t)), sizeof(size_t), freeEvicted(f); return NULL);
+    ec_n_EOF(readn(skfd, &pathLen, sizeof(size_t)), sizeof(size_t), freeEvicted(f); return NULL);
     ec_z(f->path = calloc(pathLen + 1, sizeof(char)), freeEvicted(f); return NULL);
-    ec_n(readn(skfd, f->path, pathLen), pathLen, freeEvicted(f); return NULL);
-    ec_n(readn(skfd, &f->size, sizeof(size_t)), sizeof(size_t), freeEvicted(f); return NULL);
+    ec_n_EOF(readn(skfd, f->path, pathLen), pathLen, freeEvicted(f); return NULL);
+    ec_n_EOF(readn(skfd, &f->size, sizeof(size_t)), sizeof(size_t), freeEvicted(f); return NULL);
     ec_z(f->content = calloc(f->size, sizeof(char)), freeEvicted(f); return NULL);
-    ec_n(readn(skfd, f->content, f->size), f->size, freeEvicted(f); return NULL);
+    ec_n_EOF(readn(skfd, f->content, f->size), f->size, freeEvicted(f); return NULL);
     return f;
 }

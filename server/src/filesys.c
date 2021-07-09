@@ -4,7 +4,7 @@
 
 
 // error messages
-#define E_DATA_INTERNAL ANSI_COLOR_RED "INTERNAL ERROR: FILESYS FAILURE" ANSI_COLOR_RESET
+#define E_DATA_INTERNAL BRED "INTERNAL ERROR: FILESYS FAILURE" REG
 
 #define eo(c)                    \
     if (errno != 0)              \
@@ -17,7 +17,7 @@
 #define ec_nz_f(s)                                  \
     if (s)                                          \
     {                                               \
-        perror(ANSI_COLOR_RED #s ANSI_COLOR_RESET); \
+        perror(BRED #s REG); \
         return -1;                                  \
     }
 
@@ -1170,9 +1170,9 @@ void printString(const char *str, size_t len){
 void printEvicted(void *arg)
 {
     evictedFile *c = arg;
-    ec_neg(printf(ANSI_COLOR_MAGENTA "EVCTD -- PATH: %s | CONTENT: ", c->path), return);
+    ec_neg(printf(BMAG "EVCTD -- PATH: %s | CONTENT: ", c->path), return);
     printString(c->content,c->size);
-    ec_neg(printf(ANSI_COLOR_RESET "\n"), return);
+    ec_neg(printf(REG "\n"), return);
     ec_neg(printf(" LOCKERS:\n"), return);
     queueCallback(c->notifyLockers, printFD);
     errno = 0;
@@ -1182,9 +1182,9 @@ void printEvicted(void *arg)
 void printFnode(void *arg)
 {
     fnode *c = arg;
-    ec_neg(printf(ANSI_COLOR_GREEN "FNODE -- PATH: %s | CONTENT: ", c->path), return);
+    ec_neg(printf(BGRN "FNODE -- PATH: %s | CONTENT: ", c->path), return);
     printString(c->content,c->size);
-    ec_neg(printf(ANSI_COLOR_RESET "\n"), return);
+    ec_neg(printf(REG "\n"), return);
     ec_neg(printf(" LOCKERS:\n"), return);
     queueCallback(c->lockersPending, printFD);
     ec_neg(printf(" OPENERS:\n"), return);

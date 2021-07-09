@@ -14,18 +14,8 @@
 #include <unistd.h>
 #include <limits.h>
 
-// output colors
-#define ANSI_COLOR_RED "\x1b[31m"
-#define ANSI_COLOR_GREEN "\x1b[32m"
-#define ANSI_COLOR_YELLOW "\x1b[33m"
-#define ANSI_COLOR_BLUE "\x1b[34m"
-#define ANSI_COLOR_MAGENTA "\x1b[35m"
-// #define ANSI_COLOR_MAGENTA "\033[1;35m"
-#define ANSI_COLOR_CYAN "\x1b[36m"
-#define ANSI_COLOR_RESET "\x1b[0m"
+// colors
 #define REG "\x1b[0m"
-
-
 #define BBLK "\033[1;30m"
 #define BRED "\033[1;31m"
 #define BGRN "\033[1;32m"
@@ -101,7 +91,7 @@
         if (!errno && !(s))                             \
         {                                               \
             errno = e;                                  \
-            perror(ANSI_COLOR_RED #s ANSI_COLOR_RESET); \
+            perror(BRED #s REG); \
             c;                                          \
         }                                               \
     } while (0);
@@ -120,7 +110,7 @@
     {                                                   \
         if (!errno && !(s))                             \
         {                                               \
-            perror(ANSI_COLOR_RED #s ANSI_COLOR_RESET); \
+            perror(BRED #s REG); \
             c;                                          \
         }                                               \
     } while (0);

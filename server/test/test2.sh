@@ -4,9 +4,9 @@ BWHT="\033[1;37m"
 REG="\x1b[0m"
 
 
-echo '
+echo -e $BWHT'
 ---------------LRU--------------
-'
+' $REG
 
 #run server in background
 bin/server test/conf/2_1.txt &
@@ -39,12 +39,8 @@ echo -e $REG
 kill -1 $S_PID
 sleep 1
 
-echo "
-
-
+echo -e $BWHT"
 ---------------FIFO--------------
-
-
 "
 
 rm -r test/evicted/*    # clean evicted dir

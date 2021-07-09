@@ -1,18 +1,18 @@
 #include <server.h>
 
 #pragma region
-#define eo(c)                                                      \
-    if (errno != 0)                                                \
-    {                                                              \
-        perror(ANSI_COLOR_RED "Server Internal" ANSI_COLOR_RESET); \
-        c;                                                         \
+#define eo(c)                                         \
+    if (errno != 0)                                   \
+    {                                                 \
+        perror(BRED "Server Internal" REG); \
+        c;                                            \
     }
-#define eo_af(c, f)                                                \
-    c;                                                             \
-    if (errno)                                                     \
-    {                                                              \
-        perror(ANSI_COLOR_RED "Server Internal" ANSI_COLOR_RESET); \
-        f;                                                         \
+#define eo_af(c, f)                                   \
+    c;                                                \
+    if (errno)                                        \
+    {                                                 \
+        perror(BRED "Server Internal" REG); \
+        f;                                            \
     }
 
 #define log(s, i, c)                                                      \
@@ -21,19 +21,18 @@
     strerror_r(errno, errnoBuf, 200);                                     \
     if (res == -1)                                                        \
     {                                                                     \
-        perror(ANSI_COLOR_CYAN "INTERNAL FATAL ERROR" ANSI_COLOR_RESET);  \
+        perror(BCYN "INTERNAL FATAL ERROR" REG);               \
         c;                                                                \
     }                                                                     \
     snprintf(toLog, LOGBUF_LEN, "%ld__%d__" #s "__%s", i, res, errnoBuf); \
     puts(toLog);                                                          \
     eo_af(LoggerLog(toLog, strlen(toLog)), WK_DIE_ON_ERR);
 
-#define PUSH_REQUEST(x)                                   \
-    ec_nz(pthread_mutex_lock(&lockReq), {});              \
-    /* // TODO okay to push an int? instead of a void* */ \
-    eo_af(queueEnqueue(requests, x), /* handle error */); \
-    ec_nz(pthread_cond_signal(&condReq), {});             \
-    ec_nz(pthread_mutex_unlock(&lockReq), {});
+#define PUSH_REQUEST(x, err_handle)                   \
+    ec_nz(pthread_mutex_lock(&lockReq), err_handle);  \
+    eo_af(queueEnqueue(requests, x), err_handle);     \
+    ec_nz(pthread_cond_signal(&condReq), err_handle); \
+    ec_nz(pthread_mutex_unlock(&lockReq), err_handle);
 
 typedef struct
 {
@@ -151,7 +150,7 @@ int main(int argc, char **argv)
     // send termination msg (NULL) to threads
     for (size_t i = 0; i < poolSize; i++)
     {
-        PUSH_REQUEST(NULL);
+        PUSH_REQUEST(NULL, exit(EXIT_FAILURE));
     }
     puts("Termination msg sent");
 
@@ -182,15 +181,18 @@ int main(int argc, char **argv)
 }
 
 #define DS_DEATH_MSG "DISPATCHER DIED"
-#define DS_DIE_ON_ERR                                               \
-    perror(ANSI_COLOR_RED "DISPATCHER DIED" ANSI_COLOR_RESET);      \
-    LoggerLog(DS_DEATH_MSG, strlen(DS_DEATH_MSG));                  \
-    ec_nz(pthread_kill(sigHandlerRef, SIGINT), exit(EXIT_FAILURE)); \
-    goto dispatcher_cleanup;
+#define DS_DIE_ON_ERR                                                   \
+    do                                                                  \
+    {                                                                   \
+        perror(BRED "DISPATCHER DIED" REG);                   \
+        LoggerLog(DS_DEATH_MSG, strlen(DS_DEATH_MSG));                  \
+        ec_nz(pthread_kill(sigHandlerRef, SIGINT), exit(EXIT_FAILURE)); \
+        goto dispatcher_cleanup;                                        \
+    } while (0)
 
 void *dispatcher(void *arg)
 {
-    puts(ANSI_COLOR_YELLOW "Dispatcher startup" ANSI_COLOR_RESET);
+    puts(BYEL "Dispatcher startup" REG);
 
     pthread_t sigHandlerRef = *((pthread_t *)arg);
     size_t currNClient = 0;
@@ -242,7 +244,7 @@ void *dispatcher(void *arg)
                     ec_neg1(fd_c = accept(fd_skt, NULL, 0), {});
                     if (myShutdown) // If exiting, don't accept new clients
                     {
-                        puts(ANSI_COLOR_YELLOW "Dispatcher - New connection refused" ANSI_COLOR_RESET);
+                        puts(BYEL "Dispatcher - New connection refused" REG);
                         ec_neg1(close(fd_c), exit(EXIT_FAILURE));
                     }
                     else
@@ -251,11 +253,11 @@ void *dispatcher(void *arg)
                         // ec_z(addClient(fd_c),DS_DIE_ON_ERR);
                         Client *tmp = addClient(fd_c);
                         ec_z(tmp, DS_DIE_ON_ERR);
-                        printf(ANSI_COLOR_YELLOW "Dispatcher - New connection accepted : %d - %ld\n" ANSI_COLOR_RESET, tmp->fd, currNClient);
+                        printf(BYEL "Dispatcher - New connection accepted : %d - %ld\n" REG, tmp->fd, currNClient);
                         if (snprintf(toLog, LOGBUF_LEN, "CLIENT ADDED: %d - %ld", fd_c, currNClient) < 0)
                         {
-                            DS_DIE_ON_ERR
-                        };
+                            DS_DIE_ON_ERR;
+                        }
                         eo_af(LoggerLog(toLog, strlen(toLog)), DS_DIE_ON_ERR);
                         FD_SET(fd_c, &set);
                         if (fd_c > fd_hwm)
@@ -276,7 +278,7 @@ void *dispatcher(void *arg)
                     {                     // The worker who wrote has already removed the client from the filesys
                         currNClient--;
                         fdFromWorker *= -1;
-                        printf(ANSI_COLOR_YELLOW "Dispatcher - Removing client %d - %ld\n" ANSI_COLOR_RESET, fdFromWorker, currNClient);
+                        printf(BYEL "Dispatcher - Removing client %d - %ld\n" REG, fdFromWorker, currNClient);
                         ec_nz(close(fdFromWorker), DS_DIE_ON_ERR);
                         ec_neg1(snprintf(toLog, LOGBUF_LEN, "CLIENT LEFT: %d - %ld", fdFromWorker, currNClient), DS_DIE_ON_ERR);
                         eo_af(LoggerLog(toLog, strlen(toLog)), DS_DIE_ON_ERR);
@@ -288,7 +290,7 @@ void *dispatcher(void *arg)
                     }
                     else
                     {
-                        printf(ANSI_COLOR_YELLOW "Dispatcher - Worker has done : %d\n" ANSI_COLOR_RESET, fdFromWorker);
+                        printf(BYEL "Dispatcher - Worker has done : %d\n" REG, fdFromWorker);
                         FD_SET(fdFromWorker, &set);
                         if (fdFromWorker > fd_hwm)
                             fd_hwm = fdFromWorker;
@@ -296,36 +298,36 @@ void *dispatcher(void *arg)
                 }
                 else if (fd == SIGNAL_READ) // Wake from signal handler
                 {
-                    // puts(ANSI_COLOR_YELLOW "Dispatcher - SIGNAL RECEIVED" ANSI_COLOR_RESET);
-                    // printf("\n\n\n\nSIGNAL RECEIVED - active_clients = %ld %d %d\n\n\n\n", currNClient, myShutdown, NoMoreClients());
-                    // TODO note that between these two lines NoMoreClients might change
+                    puts(BYEL "Dispatcher - SIGNAL RECEIVED" REG);
                     if (myShutdown == HARSH_QUIT || (myShutdown == HUP_QUIT && NoMoreClients()))
                     {
                         puts("\t...EXITING...");
                         goto dispatcher_cleanup;
                     }
-                    else{
+                    else
+                    {
                         int sig = 0;
-                        readn(SIGNAL_READ,&sig,sizeof(int));
-                        if (sig == SIGUSR1) {   // print Stats
+                        readn(SIGNAL_READ, &sig, sizeof(int));
+                        if (sig == SIGUSR1)
+                        { // print Stats
                             ec_z(requestor = malloc(sizeof(Client)), DS_DIE_ON_ERR);
                             requestor->fd = -1;
-                            PUSH_REQUEST(requestor);
+                            PUSH_REQUEST(requestor, DS_DIE_ON_ERR);
                         }
-                        else // HUP_EXITING but still some clients connected
-                            FD_CLR(SIGNAL_READ, &set); // sigHandler returned, no reason to keep listening 
+                        else                           // HUP_EXITING but still some clients connected
+                            FD_CLR(SIGNAL_READ, &set); // sigHandler returned, no reason to keep listening
                     }
                 }
                 else // New request
                 {
-                    printf(ANSI_COLOR_YELLOW "Dispatcher - Request %d\n" ANSI_COLOR_RESET, fd);
+                    printf(BYEL "Dispatcher - Request %d\n" REG, fd);
                     // instead of reading here, i push the fd in the buffer
                     FD_CLR(fd, &set);
                     if (fd == fd_hwm)
                         fd_hwm--;
                     ec_neg1(snprintf(fdBuf, INT_LEN, "%06d", fd), DS_DIE_ON_ERR);
                     ec_z(requestor = icl_hash_find(clients, fdBuf), DS_DIE_ON_ERR);
-                    PUSH_REQUEST(requestor);
+                    PUSH_REQUEST(requestor, DS_DIE_ON_ERR);
                 }
             }
         }
@@ -336,7 +338,7 @@ dispatcher_cleanup:
 
 void *signalHandler(void *args)
 {
-    puts(ANSI_COLOR_BLUE "Signal Handler startup" ANSI_COLOR_RESET);
+    puts(BBLU "Signal Handler startup" REG);
     sigset_t *set = args;
     while (1)
     {
@@ -348,19 +350,19 @@ void *signalHandler(void *args)
         {
         case SIGINT:
         case SIGQUIT:
-            puts(ANSI_COLOR_BLUE "SIGINT or SIGQUIT RECEIVED" ANSI_COLOR_RESET);
+            puts(BBLU "SIGINT or SIGQUIT RECEIVED" REG);
             myShutdown = HARSH_QUIT;
             close(SIGNAL_WRITE);
             return NULL;
         case SIGHUP:
-            puts(ANSI_COLOR_CYAN "SIGHUP RECEIVED" ANSI_COLOR_RESET);
+            puts(BCYN "SIGHUP RECEIVED" REG);
             myShutdown = HUP_QUIT;
             close(SIGNAL_WRITE);
             return NULL;
         case SIGUSR1:
-            puts(ANSI_COLOR_CYAN "STATS REQUEST RECEIVED" ANSI_COLOR_RESET);
-            write(SIGNAL_WRITE,&sig,sizeof(int));
-            break;  // back in the loop
+            puts(BCYN "STATS REQUEST RECEIVED" REG);
+            write(SIGNAL_WRITE, &sig, sizeof(int));
+            break; // back in the loop
         default:;
         }
     }
@@ -368,7 +370,7 @@ void *signalHandler(void *args)
 }
 
 #define WK_DIE_ON_ERR                                               \
-    perror(ANSI_COLOR_RED "WORKER DIED" ANSI_COLOR_RESET);          \
+    perror(BRED "WORKER DIED" REG);                       \
     LoggerLog(deathMSG, strlen(deathMSG));                          \
     ec_nz(pthread_kill(sigHandlerRef, SIGINT), exit(EXIT_FAILURE)); \
     goto worker_cleanup;
@@ -379,7 +381,7 @@ void *signalHandler(void *args)
  */
 void *worker(void *args)
 {
-    puts(ANSI_COLOR_GREEN "Worker startup" ANSI_COLOR_RESET);
+    puts(BGRN "Worker startup" REG);
 
     size_t myTid = ((workerArgs *)args)->tid;
     pthread_t sigHandlerRef = *(((workerArgs *)args)->sigHandler);
@@ -404,13 +406,13 @@ void *worker(void *args)
         // GET A REQUEST
         ec_nz(pthread_mutex_lock(&lockReq), {});
 
-        while(queueIsEmpty(requests))
+        while (queueIsEmpty(requests))
             ec_nz(pthread_cond_wait(&condReq, &lockReq), {}); // wait for requests
         eo_af(requestor = queueDequeue(requests), WK_DIE_ON_ERR);
         ec_nz(pthread_mutex_unlock(&lockReq), {});
-        if (!requestor)     // TERMINATION REQUEST SENT BY main()
+        if (!requestor) // TERMINATION REQUEST SENT BY main()
             goto worker_cleanup;
-        if (requestor->fd == -1)    // STORESTATS REQUEST
+        if (requestor->fd == -1) // STORESTATS REQUEST
         {
             free(requestor);
             storeStats();
@@ -432,7 +434,7 @@ void *worker(void *args)
 
             // if there are no more clients and we are HUP-exiting,
             // dispatcher will manage exit
-            printf(ANSI_COLOR_GREEN "Client %d closed\n" ANSI_COLOR_RESET, fd);
+            printf(BGRN "Client %d closed\n" REG, fd);
             fd *= -1;
             ec_neg1(writen(WORKER_WRITE, &fd, sizeof(int)), WK_DIE_ON_ERR);
             continue;
@@ -441,7 +443,7 @@ void *worker(void *args)
         {
             WK_DIE_ON_ERR;
         }
-        puts(ANSI_COLOR_GREEN "Request accepted" ANSI_COLOR_RESET);
+        puts(BGRN "Request accepted" REG);
         printRequest(req, fd);
         switch (req->op)
         {
@@ -519,7 +521,7 @@ void *worker(void *args)
         if (evictedList) // Send back to client and notify pending lockers
         {
             // Can be capacityVictims or readNfiles target
-            printf(ANSI_COLOR_GREEN "\tServer evicting: %ld\n" ANSI_COLOR_RESET,evictedList->size);
+            // printf(BGRN "\tServer evicting: %ld\n" REG,evictedList->size);
             ec_neg1(writen(fd, &(evictedList->size), sizeof(size_t)), WK_DIE_ON_ERR);
             evictedFile *curr = queueDequeue(evictedList);
             while (curr)
@@ -552,10 +554,6 @@ void *worker(void *args)
             }
             freeEvicted(evicted);
         }
-        // if (notifyLockers) // TODO should never catch this
-        // {
-        //     ec_neg1(notifyPendingLockers(notifyLockers, FILE_NOT_FOUND), WK_DIE_ON_ERR);
-        // }
 
         evicted = NULL;
         evictedList = NULL;
@@ -616,22 +614,8 @@ int notifyPendingLockers(queue *lockers, int msg)
     Client *curr = queueDequeue(lockers);
     while (!errno && curr)
     {
-        // int fd = curr->fd;
-        // printf("QUEUE SIZE %ld\n", lockers->size);
-        // printf("CURR ADDRESS %p | FD %d %d\n", curr, curr->fd, fd);
-        // // errno might get dirty here
-        // char buf = msg;
-        // int buf[1];
-        // buf[0] = msg;
-        // char *buf;
-        // ec_z(buf = calloc(1,sizeof(char)), exit(EXIT_FAILURE)); //TODO
-        // *buf = msg;
-        // notify client
-        ec_n(writen(curr->fd, &msg, sizeof(int)), sizeof(int), /* queueDestroy(lockers); */ return -1;); // TODO queue destroyed by worker ok?
-        // free(buf);
-        // notify dispatcher to put fd back into select's set
+        ec_n(writen(curr->fd, &msg, sizeof(int)), sizeof(int), /* queueDestroy(lockers); */ return -1;);
         ec_n(writen(WORKER_WRITE, &(curr->fd), sizeof(int)), sizeof(int), /* queueDestroy(lockers); */ return -1;);
-
         curr = queueDequeue(lockers);
     }
     queueDestroy(lockers);
@@ -672,15 +656,13 @@ int readConfig(char *configPath, ServerData *new)
 
 /**
  * Put here and not in conn.h to avoid circular dependencies with filesys
- * 
- * DOES NOT CLOSE FD
+ * Note that doesn't close(fd), it will be done later
  */
 int removeClient(int fd, queue **notifyLockers)
 {
     // close connection
     char fdBuf[INT_LEN];
     ec_neg1(snprintf(fdBuf, INT_LEN, "%06d", fd), return -1);
-    // ec_neg1(close(fd), return -1); // TODO remove this
     // remove from storage
     ec_nz(LOCKCLIENTS, return -1);
     Client *toRemove = icl_hash_find(clients, fdBuf);

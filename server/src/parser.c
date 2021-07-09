@@ -4,7 +4,7 @@
 #define CHK_MULT(o)                                                                            \
     if (queueFind(opQ, &op, NULL))                                                             \
     {                                                                                          \
-        puts(ANSI_COLOR_RED "Option -" #o " is specified multiple times.\n" ANSI_COLOR_RESET); \
+        puts(BRED "Option -" #o " is specified multiple times.\n" REG); \
         /*printUsage(argv[0]);*/                                                               \
         return -1;                                                                             \
     }
@@ -13,7 +13,7 @@
         if (!(*opList)->tail || (((Option *)((*opList)->tail->data))->flag != 'w' &&                    \
                                  ((Option *)((*opList)->tail->data))->flag != 'W'))                     \
         {                                                                                               \
-            puts(ANSI_COLOR_RED "Option -D requires -W or -w as precedent option.\n" ANSI_COLOR_RESET); \
+            puts(BRED "Option -D requires -W or -w as precedent option.\n" REG); \
             continue;                                                                                   \
         }                                                                                               \
 
@@ -21,7 +21,7 @@
         if (!(*opList)->tail || (((Option *)((*opList)->tail->data))->flag != 'r' &&                    \
                                  ((Option *)((*opList)->tail->data))->flag != 'R'))                     \
         {                                                                                               \
-            puts(ANSI_COLOR_RED "Option -d requires -R or -r as precedent option.\n" ANSI_COLOR_RESET); \
+            puts(BRED "Option -d requires -R or -r as precedent option.\n" REG); \
             continue;                                                                                   \
         }                                                                                               \
 
@@ -88,14 +88,16 @@ int parser(int argc, char **argv, queue **opList)
                 ec_z(op->arg = malloc(sizeof(int)), goto parser_cleanup);
                 if (!item || !isInteger(item, op->arg))
                 {
-                    puts(ANSI_COLOR_RED "-R option requires a path and (optionally) an integer.\n" ANSI_COLOR_RESET);
-                    // printUsage(argv[0]);
+                    puts(BRED "-R option requires a path and (optionally) an integer.\n" REG);
                     free(op->arg);
                     free(op);
                     continue;
                 }
-                // TODO item strtok ok? free?
                 free(bkp);
+            }
+            if (!optarg){   // make sure op->arg is NULL in this case
+                free(op->arg);
+                op->arg = NULL;
             }
             break;
         case 't': /* Specifies the time between two consecutive requests to the server */
@@ -104,11 +106,14 @@ int parser(int argc, char **argv, queue **opList)
                 optarg = argv[optind];
             if (optarg && !isInteger(optarg, (int *)(op->arg)))
             {
-                puts(ANSI_COLOR_RED "-t option requires an (optional) integer.\n" ANSI_COLOR_RESET);
-                // printUsage(argv[0]);
+                puts(BRED "-t option requires an (optional) integer.\n" REG);
                 free(op->arg);
                 free(op);
-                continue; //TODO continue o goto parser_cleanup?
+                continue;
+            }
+            if (!optarg){   // make sure op->arg is NULL in this case
+                free(op->arg);
+                op->arg = NULL;
             }
             break;
         case 'p': /* Prints information about operation performed on the server */
@@ -143,15 +148,13 @@ int parser(int argc, char **argv, queue **opList)
 
                 if (!isInteger(item, n))
                 {
-                    puts(ANSI_COLOR_RED "-w option requires a path and (optionally) an integer.\n" ANSI_COLOR_RESET);
-                    // printUsage(argv[0]);
+                    puts(BRED "-w option requires a path and (optionally) an integer.\n" REG);
                     queueDestroy(op->arg);
                     free(op);
                     continue;
                 }
             }
             ec_nz(queueEnqueue((queue *)(op->arg), n), goto parser_cleanup);
-            // TODO item strtok ok? free?
             free(bkp);
             break;
         }
@@ -167,8 +170,7 @@ int parser(int argc, char **argv, queue **opList)
             break;
         }
         case '?':
-            printf(ANSI_COLOR_RED "Unknown option '-%c'\n" ANSI_COLOR_RESET, optopt);
-            // printUsage(argv[0]);
+            printf(BRED "Unknown option '-%c'\n" REG, optopt);
             free(op);
             continue;
         case 'h':

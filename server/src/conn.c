@@ -4,6 +4,7 @@ void setFlags(Request *req, int flags);
 
 #define SZSHORT sizeof(unsigned short)
 #define SZINT sizeof(int)
+#define SZST sizeof(size_t)
 
 #define ec_n_EOF(s, r, c)          \
     do                             \
@@ -16,7 +17,7 @@ void setFlags(Request *req, int flags);
         }                          \
     } while (0);
 
-// TODO remmove printf debug
+
 /**
  * Reads a request from an fd.
  * errno = ENOTCONN if reads eof from client
@@ -38,61 +39,44 @@ Request *getRequest(int fd)
     // sizeof(char) dovrebbe essere sempre 1, ma lasciamo sizeof(char)
     // NB: se la read fallisce, setta errno e lo gestirà il chiamante
 
-    int bread = 0, singleRead;
-    ec_n_EOF(singleRead = readn(fd, &(req->op), SZCHAR), SZCHAR, free(req); return NULL;); // should read 1 byte
-    // printf("%d\n", singleRead);
-    bread += singleRead;
+    ec_n_EOF(readn(fd, &(req->op), SZCHAR), SZCHAR, free(req); return NULL;); // should read 1 byte
 
-    ec_n_EOF(singleRead = readn(fd, &(oflags), SZCHAR), SZCHAR, free(req); return NULL;);
-    // printf("%d\n", singleRead);
-    bread += singleRead;
-    ec_n_EOF(singleRead = readn(fd, &(req->nfiles), SZINT), SZINT, free(req); return NULL;);
-    // printf("%d\n", singleRead);
-    bread += singleRead;
-    ec_n_EOF(singleRead = readn(fd, &(req->pathLen), SZSHORT), SZSHORT, free(req); return NULL;);
-    // printf("%d\n", singleRead);
-    bread += singleRead;
-    ec_n_EOF(singleRead = readn(fd, &(req->dirnameLen), SZSHORT), SZSHORT, free(req); return NULL;);
-    // printf("%d\n", singleRead);
-    bread += singleRead;
-    ec_n_EOF(singleRead = readn(fd, &(req->appendLen), sizeof(size_t)), sizeof(size_t), free(req); return NULL;);
-    // printf("%d\n", singleRead);
-    bread += singleRead;
+    ec_n_EOF(readn(fd, &(oflags), SZCHAR), SZCHAR, free(req); return NULL;);
 
-    // LETTURA CAMPI "DINAMICI"
+    ec_n_EOF(readn(fd, &(req->nfiles), SZINT), SZINT, free(req); return NULL;);
+
+    ec_n_EOF(readn(fd, &(req->pathLen), SZSHORT), SZSHORT, free(req); return NULL;);
+
+    ec_n_EOF(readn(fd, &(req->dirnameLen), SZSHORT), SZSHORT, free(req); return NULL;);
+
+    ec_n_EOF(readn(fd, &(req->appendLen), SZST), SZST, free(req); return NULL;);
+
+    // Read 'dynamic' fields
     // PATH
     int pathlen;
     ec_z(req->path = calloc(req->pathLen + 1, SZCHAR), freeRequest(req); return NULL;);
     ec_n_EOF(pathlen = readn(fd, req->path, req->pathLen * SZCHAR), req->pathLen, freeRequest(req); return NULL;); // DIRNAME
-    // printf("path: %d\n", pathlen);
-    bread += pathlen;
-    // if (req->dirnameLen)
+
+    // DIRNAME
+    if (req->dirnameLen) // slightly unnecessary if
     {
         ec_z(req->dirname = calloc(req->dirnameLen + 1, SZCHAR), freeRequest(req); return NULL;);
-
-        ec_n_EOF(singleRead = readn(fd, req->dirname, req->dirnameLen * SZCHAR), req->dirnameLen, freeRequest(req); return NULL;);
-        // printf("%d\n", singleRead);
-        bread += singleRead;
+        ec_n_EOF(readn(fd, req->dirname, req->dirnameLen * SZCHAR), req->dirnameLen, freeRequest(req); return NULL;);
     }
     // APPEND
-    // if (req->appendLen)
+    if (req->appendLen) // slightly unnecessary if
     {
         ec_z(req->append = calloc(req->appendLen + 1, SZCHAR), freeRequest(req); return NULL;);
-
-        ec_n_EOF(singleRead = readn(fd, req->append, req->appendLen * SZCHAR), req->appendLen, freeRequest(req); return NULL;);
-        // printf("%d\n", singleRead);
-        bread += singleRead;
+        ec_n_EOF(readn(fd, req->append, req->appendLen * SZCHAR), req->appendLen, freeRequest(req); return NULL;);
     }
 
-    // Conversione a unsigned short
     setFlags(req, oflags);
 
-    // Add client
+    // Add client (we are sure to find it)
     ec_neg(snprintf(fdBuf, INT_LEN, "%06d", fd), freeRequest(req); return NULL;);
     ec_nz(LOCKCLIENTS, freeRequest(req); return NULL);
     ec_z(req->client = icl_hash_find(clients, fdBuf), freeRequest(req); errno = EBADF; return NULL;);
     ec_nz(UNLOCKCLIENTS, freeRequest(req); return NULL);
-    // printf("bytes read: %d\n", bread);
     return req;
 }
 
@@ -117,36 +101,30 @@ void setFlags(Request *req, int flags)
     return;
 }
 /**
- * Masks SIGINT,SIGQUIT and SIGHUP
+ * Masks SIGINT,SIGQUIT,SIGHUP and SIGUSR1. Ignores SIGPIPE 
  * @returns set, dies on error
  */
 sigset_t initSigMask()
 {
-    sigset_t set;
-
-    // TODO clean
-    // mask all signals
-    // ec_neg1(sigfillset(&set), exit(EXIT_FAILURE));
-    // ec_neg1(pthread_sigmask(SIG_SETMASK, &set, NULL), exit(EXIT_FAILURE)); 
-
-        // ignore SIGPIPE
-        struct sigaction saa;
+    // ignore SIGPIPE
+    struct sigaction saa;
     memset(&saa, 0, sizeof(saa));
     saa.sa_handler = SIG_IGN;
     ec_neg1(sigaction(SIGPIPE, &saa, NULL), exit(EXIT_FAILURE));
 
-        /*we want to handle these signals, we will do it with sigwait*/
-        ec_neg1(sigemptyset(&set), exit(EXIT_FAILURE));    /*empty mask*/
-    ec_neg1(sigaddset(&set, SIGINT), exit(EXIT_FAILURE));  /* it will be handled with sigwait only */
-    ec_neg1(sigaddset(&set, SIGQUIT), exit(EXIT_FAILURE)); /* it will be handled with sigwait only */
-    ec_neg1(sigaddset(&set, SIGHUP), exit(EXIT_FAILURE));  /* it will be handled with sigwait only */
-    ec_neg1(sigaddset(&set, SIGUSR1), exit(EXIT_FAILURE));  /* it will be handled with sigwait only */
+    sigset_t set;
+    // We will handle these signals with sigwait in a signal handler thread
+    ec_neg1(sigemptyset(&set), exit(EXIT_FAILURE));
+    ec_neg1(sigaddset(&set, SIGINT), exit(EXIT_FAILURE));
+    ec_neg1(sigaddset(&set, SIGQUIT), exit(EXIT_FAILURE));
+    ec_neg1(sigaddset(&set, SIGHUP), exit(EXIT_FAILURE));
+    ec_neg1(sigaddset(&set, SIGUSR1), exit(EXIT_FAILURE));
     ec_neg1(pthread_sigmask(SIG_BLOCK, &set, NULL), exit(EXIT_FAILURE));
     return set;
 }
 
 /**
- * Frees a request, but doesn't free Request->client
+ * Frees a request (doesn't free Request->client)
  */
 void freeRequest(void *arg)
 {
@@ -159,7 +137,7 @@ void freeRequest(void *arg)
 }
 
 /**
- * Alloc a Client structure from an fd and adds it to the 'clients' hash_t
+ * Allocs a Client structure from an fd and adds it to the 'clients' hash_t
  * @returns new Client, NULL on failure (EADDRINUSE | ENOMEM);
  */
 Client *addClient(int fd)
@@ -192,7 +170,7 @@ _Bool NoMoreClients()
     return 1;
 }
 
-// debug utility
+// TODO make this better
 void printRequest(Request *req, int fd)
 {
     // TODO put append back again ?
@@ -206,7 +184,8 @@ void printRequest(Request *req, int fd)
            req->dirnameLen,
            req->appendLen,
            req->path,
-           req->dirname/*,
-           req->append*/);
+           req->dirname /*,
+           req->append*/
+    );
     return;
 }

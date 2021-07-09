@@ -10,9 +10,9 @@ int printString(const char *str, size_t len)
 int printEvicted(void *arg)
 {
     evictedFile *c = arg;
-    ec_neg(printf(BMAG "\nEVCTD -- PATH: %s | CONTENT: " ANSI_COLOR_RESET ANSI_COLOR_MAGENTA, c->path), return -1);
+    ec_neg(printf(BMAG "\nEVCTD -- PATH: %s | CONTENT: " REG BMAG, c->path), return -1);
     ec_neg(printString(c->content, c->size), return -1);
-    ec_neg(printf(ANSI_COLOR_RESET "\n"), return -1);
+    ec_neg(printf(REG "\n"), return -1);
     errno = 0;
     return 0;
 }

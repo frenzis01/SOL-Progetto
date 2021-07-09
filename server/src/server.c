@@ -277,6 +277,7 @@ void *dispatcher(void *arg)
                         currNClient--;
                         fdFromWorker *= -1;
                         printf(ANSI_COLOR_YELLOW "Dispatcher - Removing client %d - %ld\n" ANSI_COLOR_RESET, fdFromWorker, currNClient);
+                        ec_nz(close(fdFromWorker), DS_DIE_ON_ERR);
                         ec_neg1(snprintf(toLog, LOGBUF_LEN, "CLIENT LEFT: %d - %ld", fdFromWorker, currNClient), DS_DIE_ON_ERR);
                         eo_af(LoggerLog(toLog, strlen(toLog)), DS_DIE_ON_ERR);
                         if (NoMoreClients() && myShutdown == HUP_QUIT)
@@ -671,13 +672,15 @@ int readConfig(char *configPath, ServerData *new)
 
 /**
  * Put here and not in conn.h to avoid circular dependencies with filesys
+ * 
+ * DOES NOT CLOSE FD
  */
 int removeClient(int fd, queue **notifyLockers)
 {
     // close connection
     char fdBuf[INT_LEN];
     ec_neg1(snprintf(fdBuf, INT_LEN, "%06d", fd), return -1);
-    ec_neg1(close(fd), return -1);
+    // ec_neg1(close(fd), return -1); // TODO remove this
     // remove from storage
     ec_nz(LOCKCLIENTS, return -1);
     Client *toRemove = icl_hash_find(clients, fdBuf);

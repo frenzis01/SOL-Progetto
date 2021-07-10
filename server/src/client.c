@@ -16,15 +16,15 @@
 
 #pragma region
 #define FILESYS_err (errno == EACCES || errno == ENOENT || errno == EADDRINUSE || errno == EFBIG || errno == EINVAL)
-#define ec_api(s)                                                                  \
-    do                                                                             \
-    {                                                                              \
-        if (nanosleep(&interval, NULL) == (-1) || ((s) == (-1) && !(FILESYS_err))) \
-        {                                                                          \
-            if (errno && errno != ECONNRESET && errno != ENOTCONN)                 \
-                perror(BRED #s REG);                                               \
-            goto cleanup;                                                          \
-        }                                                                          \
+#define ec_api(s)                                                                    \
+    do                                                                               \
+    {                                                                                \
+        if (nanosleep(&interval, NULL) == (-1) || ((s) == (-1) && !(FILESYS_err)))   \
+        {                                                                            \
+            if (errno && errno != ECONNRESET && errno != ENOTCONN && errno != EPIPE) \
+                perror(BRED #s REG);                                                 \
+            goto cleanup;                                                            \
+        }                                                                            \
     } while (0);
 
 #define ec_neg1_cli(s, c)                                          \
@@ -70,6 +70,14 @@ struct timespec interval;
 
 int main(int argc, char **argv)
 {
+
+    // Ignore sigpipe to exit cleanly (write return value is always checked)
+    struct sigaction saa;
+    memset(&saa, 0, sizeof(saa));
+    saa.sa_handler = SIG_IGN;
+    ec_neg1(sigaction(SIGPIPE, &saa, NULL), exit(EXIT_FAILURE));
+
+    // These will be useful later
     queue *options = NULL, *args = NULL;
     Option *op = NULL, *tmp = NULL;
     char *path = NULL,
@@ -81,14 +89,15 @@ int main(int argc, char **argv)
     interval.tv_nsec = 0;
     interval.tv_sec = 0;
 
+    // Parse command line options to get an options queue
     ec_neg1(parser(argc, argv, &options), goto cleanup);
-    if (hPresent(options))
+    if (hPresent(options)) // we have to exit without sending any request
     {
         printUsage(argv[0]);
         freeOptionsList(&options);
         return 0;
     }
-    while (!queueIsEmpty(options))
+    while (!queueIsEmpty(options)) // one option at a time
     {
         ec_z(op = queueDequeue(options), goto cleanup);
         switch (op->flag)
@@ -96,10 +105,10 @@ int main(int argc, char **argv)
         case 'f': // SOCKET CONN
         {
             struct timespec expire;
-            expire.tv_sec = time(NULL) + 60;
-            // auto-expire after a 60s and retry every 100ms if 0 to avoid flooding
+            expire.tv_sec = time(NULL) + 10;
+            // auto-expire after a 10s and retry every 100ms if 0 to avoid flooding
             strncpy(sockname, op->arg, PATH_MAX);
-            ec_neg1_cli(openConnection(sockname, t ? t : 100, expire), goto cleanup);
+            ec_neg1_cli(openConnection(sockname, t ? t : 100, expire), free(op->arg); goto cleanup);
             free(op->arg);
             break;
         }
@@ -112,8 +121,8 @@ int main(int argc, char **argv)
 
             int x = n ? *n : 0;
             free(n);
-            ec_neg1_cli(getFilesFromDir(wDir, x, &args), goto cleanup);
-            ec_neg1_cli(writeFilesList(args, dirname), goto cleanup);
+            ec_neg1_cli(getFilesFromDir(wDir, x, &args), free(wDir); goto cleanup);
+            ec_neg1_cli(writeFilesList(args, dirname), free(wDir); goto cleanup);
 
             free(wDir);
             args = NULL;
@@ -162,12 +171,10 @@ int main(int argc, char **argv)
             free(dirEvicted);
             dirEvicted = op->arg ? op->arg : NULL;
             break;
-        default:;
+        default:; // Should never catch this
         }
         free(op);
-        queueDestroy(args);
         free(path);
-        args = NULL;
         path = NULL;
         op = NULL;
     }
@@ -176,11 +183,10 @@ cleanup:
     closeConnection(sockname);
     free(op);
     freeOptionsList(&options);
-    queueDestroy(args);
     free(path);
     free(dirEvicted);
     free(dirname);
-    return -1;
+    return 0;
 }
 
 /**
@@ -207,8 +213,9 @@ int writeFilesList(queue *files, const char *dirname)
         if (res == SUCCESS)
         {
             ec_api(writeFile(path, dirname));
+            ec_api(closeFile(path));
         }
-        else
+        else if (errno == EADDRINUSE) // If it already exists then append
         {
             ec_api(res = openFile(path, 0));
             if (res == SUCCESS)
@@ -218,6 +225,7 @@ int writeFilesList(queue *files, const char *dirname)
                 ec_api(appendToFile(path, buf, size, dirname));
                 free(buf);
                 buf = NULL;
+                ec_api(closeFile(path));
             }
         }
         free(path);
@@ -233,6 +241,9 @@ cleanup:
     return -1;
 }
 
+/**
+ * Utility needed in readFilesList
+ */
 evictedFile *evictedWrap(char *path, char *content, size_t size)
 {
     evictedFile *toRet;
@@ -273,6 +284,7 @@ int readFilesList(queue *files, const char *dirname)
                 free(f);
                 f = NULL;
             }
+            ec_api(closeFile(path));
         }
         free(path);
         free(buf);
@@ -348,13 +360,18 @@ cleanup:
     return -1;
 }
 
+/**
+ * @returns 1 if 'name' is ".." or "."
+ */
 int specialDir(const char *name)
 {
     if (!strncmp(name, "..", PATH_MAX) || !strncmp(name, ".", PATH_MAX))
         return 1;
     return 0;
 }
-
+/**
+ * @returns result of the concatenation of p1 and p2
+ */
 char *catPaths(const char *p1, const char *p2)
 {
     char *path;
@@ -374,7 +391,6 @@ int getFilesFromDir(const char *dirname, int n, queue **plist)
     ec_z(*plist = queueCreate(free, NULL), return -1);
     ec_z(dir = opendir(dirname), goto cleanup;);
     struct dirent *file;
-    // size_t dirLen = strnlen(dirname, PATH_MAX);
     _Bool all = (n > 0) ? 0 : 1;
 
     queue *subDir = NULL;
@@ -385,12 +401,13 @@ int getFilesFromDir(const char *dirname, int n, queue **plist)
         ec_z(path = catPaths(dirname, file->d_name), goto cleanup);
         ec_neg1(stat(path, &s), goto cleanup);
 
+        // We ignore files that aren't regular
         if ((!S_ISDIR(s.st_mode) && !S_ISREG(s.st_mode)) || specialDir(file->d_name))
         {
             free(path);
             continue;
         }
-        if (S_ISDIR(s.st_mode))
+        if (S_ISDIR(s.st_mode)) // Explore dir recursively
         {
             ec_neg1(getFilesFromDir(path, n, &subDir), goto cleanup);
             free(path);
@@ -405,7 +422,7 @@ int getFilesFromDir(const char *dirname, int n, queue **plist)
             subDir = NULL;
             curr = NULL;
         }
-        else if (S_ISREG(s.st_mode))
+        else // is a regular file
         {
             ec_neg1(queueEnqueue(*plist, path), goto cleanup);
             n--;

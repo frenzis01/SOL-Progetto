@@ -49,8 +49,6 @@ void freeRequest(void *arg);
 
 Client *addClient(int fd);
 
-// int removeClient(int fd, queue **notifyLockers);
-
 _Bool NoMoreClients();
 
 void printRequest (Request *req, int fd);

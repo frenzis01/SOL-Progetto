@@ -51,10 +51,10 @@ S_PID=$!
 bin/client -p -t 50 -f sock -W mock/3/3.rtf,mock/3/9.rtf,mock/3/10.rtf,mock/3/1.doc,mock/3/2.doc
 kill -10 $S_PID # Print store statistics
 
-# Writing a 3MB file will cause the eviction of 3.rtf.doc and 9.rtf
+# Writing a 3MB file will cause the eviction of 3.rtf and 9.rtf
 bin/client -p -t 50 -f sock -W mock/3/11.rtf -D test/evicted
 echo -e $BWHT "
-    Let's check if the client received and stored 3.rtf.doc and 9.rtf
+    Let's check if the client received and stored 3.rtf and 9.rtf
 "
 ls -s test/evicted$PWD/mock/3
 echo -e $REG
@@ -71,4 +71,8 @@ ls -s test/evicted$PWD/mock/3
 kill -1 $S_PID
 sleep 1
 
-echo 'Well done!'
+echo -e $BWHT '
+
+    Well done!
+
+' $REG

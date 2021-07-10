@@ -6,6 +6,7 @@ void setFlags(Request *req, int flags);
 #define SZINT sizeof(int)
 #define SZST sizeof(size_t)
 
+// Useful for readn
 #define ec_n_EOF(s, r, c)          \
     do                             \
     {                              \
@@ -16,7 +17,6 @@ void setFlags(Request *req, int flags);
             c;                     \
         }                          \
     } while (0);
-
 
 
 
@@ -35,22 +35,14 @@ Request *getRequest(int fd)
     req->append = NULL;
     req->dirname = NULL;
     //    Request structure: (without ';')
-    //   {1B_op;1B_oflag;4B_nfiles;2B_pathLen;2_dirnameLen;10B_appendLen;
-    //    pathLen_path;appendLen_append;dirnameLen_dirname}
+    //   {1B_op;1B_oflag;4B_nfiles;2B_pathLen;2B_dirnameLen;8B_appendLen;
+    //    pathLen_path;dirnameLen_dirname;appendLen_append}
 
-    // sizeof(char) dovrebbe essere sempre 1, ma lasciamo sizeof(char)
-    // NB: se la read fallisce, setta errno e lo gestirà il chiamante
-
-    ec_n_EOF(readn(fd, &(req->op), SZCHAR), SZCHAR, free(req); return NULL;); // should read 1 byte
-
+    ec_n_EOF(readn(fd, &(req->op), SZCHAR), SZCHAR, free(req); return NULL;);
     ec_n_EOF(readn(fd, &(oflags), SZCHAR), SZCHAR, free(req); return NULL;);
-
     ec_n_EOF(readn(fd, &(req->nfiles), SZINT), SZINT, free(req); return NULL;);
-
     ec_n_EOF(readn(fd, &(req->pathLen), SZSHORT), SZSHORT, free(req); return NULL;);
-
     ec_n_EOF(readn(fd, &(req->dirnameLen), SZSHORT), SZSHORT, free(req); return NULL;);
-
     ec_n_EOF(readn(fd, &(req->appendLen), SZST), SZST, free(req); return NULL;);
 
     // Read 'dynamic' fields

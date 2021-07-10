@@ -8,14 +8,14 @@
  * PATH_MAX = 4096 (2bytes needed to code pathlength)
  * 
  * Request structure: (without ';')
- *  {1B_op;1B_oflag;4B_nfiles;2B_pathLen;2_dirnameLen;10B_appendLen;\
+ *  {1B_op;1B_oflag;4B_nfiles;2B_pathLen;2_dirnameLen;8B_appendLen;\
  *   pathLen_path;appendLen_append;dirnameLen_dirname}
  * 
  * Response structure:
- *  {RESPONSE CODE | 10B_Nevicted;...evictedFiles...}
+ *  {RESPONSE CODE | 8B_Nevicted;...evictedFiles...}
  * 
  * Evicted files structure:
- *  {10B_pathLen,path,10B_size,content}
+ *  {8B_pathLen,path,8B_size,content}
  *  
  */
 
@@ -33,14 +33,7 @@
 #define REMOVE_FILE 9
 #pragma endregion
 
-// Operations response codes
-// #define CODE_LEN 1
 #define SUCCESS 0
-#define FILE_NOT_FOUND 1
-#define NO_ACCESS 2
-#define TOO_BIG 3
-#define ALREADY_EXISTS 4
-
 #define MSGLEN_DIM 10
 
 #define NO_FLAGS 0
@@ -49,9 +42,7 @@
 #define BOTH_FLAGS 3
 
 #define NUM_LEN 10
-
 #define INT_LEN 7
-
 #define UNIX_PATH_MAX 108
 
 #define SZCHAR sizeof(char)

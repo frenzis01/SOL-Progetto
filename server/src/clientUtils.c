@@ -14,6 +14,9 @@ int printEvictedPath(void *arg)
     return 0;
 }
 
+/**
+ * Useful only for text-only files
+ */
 int printEvicted(void *arg)
 {
     evictedFile *c = arg;
@@ -104,7 +107,8 @@ store_cleanup:
 }
 
 /**
- * If path is a relative path, frees path and returns corresponding absolute path
+ * @param path path to be 'absolutified'. Can be either absolute or relative
+ * @returns absolute path corresponding to 'path'
  */
 char *getAbsolutePath(const char *path)
 {
@@ -121,8 +125,6 @@ char *getAbsolutePath(const char *path)
     ec_z(getcwd(cwd, sizeof(cwd)), return NULL);
     ec_z(absPath = calloc(strnlen(path, PATH_MAX) + strnlen(cwd, PATH_MAX) + 2, sizeof(char)),
          return NULL);
-    // strncat(absPath, cwd, PATH_MAX);
-    // strncat(absPath+strnlen(absPath,PATH_MAX), path, PATH_MAX);
     ec_neg(snprintf(absPath, PATH_MAX, "%s/%s", cwd, path), return NULL);
     return absPath;
 }

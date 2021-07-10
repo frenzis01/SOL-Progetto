@@ -128,17 +128,9 @@ writen(int fd, void *ptr, size_t n);
 
 void freeNothing(void *arg) { return; }
 
-char *readLineFromFILEn(char *inputfer, unsigned int len, FILE *fp);
-
-char *readLineFromFILE(char *buffer, unsigned int len, FILE *fp);
-
-int myRead(const char *path, char *buf, size_t bufSize);
-
 char *conf_string(FILE *file, char const *desired_name);
 
 int conf_sizet(FILE *file, char const *desired_name, size_t *ret);
-
-// sigset_t initSigMask();
 
 int max(int args, ...);
 

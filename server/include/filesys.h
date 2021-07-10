@@ -48,7 +48,7 @@ typedef struct {
 typedef struct {
     queue *files;
     icl_hash_t *fdict;
-    // NB: fdict cotiene data*, i nodi della queue, non fnode*
+    // NB: fdict contains data* (queue nodes) not fnode*
 
     pthread_mutex_t lockStore;
 
@@ -88,6 +88,7 @@ int closeFile(char *path, Client *client);
 
 int removeFile(char *path, Client *client, evictedFile **evicted);
 
+
 // store
 int storeInit(size_t maxNfiles, size_t maxSize, size_t evictPolicy);
 
@@ -96,7 +97,7 @@ int storeDestroy();
 queue *storeRemoveClient(Client *client);
 
 
-// filesys struct - prints and frees 
+// filesys prints and frees 
 
 void printEvicted(void *arg);
 

@@ -6,8 +6,7 @@ INCDIR          = ./include
 INCLUDES	= -I $(INCDIR)
 TARGETS	= 	bin/server
 
-LIBS = -L ./lib -lqueue -lutils -lserver -llogger -lm -lfilesys -licl_hash -lconn -lpthread #-lm è per math.h
-LIBS_SERVER = -L ./lib -lqueue -lutils -llogger -lfilesys -licl_hash -lconn -lpthread
+LIBS = -L ./lib -lqueue -lutils -llogger -lfilesys -licl_hash -lconn -lpthread
 LIBS_SERVER_SO = lib/libqueue.so lib/libutils.so lib/liblogger.so lib/libfilesys.so lib/libicl_hash.so lib/libconn.so
 .PHONY: clean
 .SUFFIXES: .c .h
@@ -25,7 +24,7 @@ test3: test/test3.sh bin/client bin/server
 	rm -r -f test/read/* test/evicted/* sock
 	test/test3.sh
 
-bin/server: src/server.c lib/libserver.so $(INCDIR)/server.h
+bin/server: src/server.c $(LIBS_SERVER_SO)
 	rm -f sock
 	rm -f log.txt
 	$(CC) $(CFLAGS) -fno-stack-protector $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' $(LIBS)
@@ -70,9 +69,6 @@ lib/libfilesys.so: lib/filesys.o lib/libqueue.so lib/libicl_hash.so lib/libutils
 
 lib/libconn.so: lib/conn.o lib/libicl_hash.so lib/libutils.so $(INCDIR)/conn.h $(INCDIR)/protocol.h
 	$(CC) -shared -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lutils -licl_hash
-
-lib/libserver.so: lib/server.o $(INCDIR)/server.h $(LIBS_SERVER_SO)
-	$(CC) -shared -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' $(LIBS_SERVER)
 
 #client libs
 lib/libparser.so: lib/parser.o lib/libqueue.so lib/libutils.so $(INCDIR)/parser.h

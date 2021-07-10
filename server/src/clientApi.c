@@ -25,6 +25,19 @@
         }                                                   \
     } while (0);
 
+#define ec_n_PIPE(s, r, c)                                   \
+    do                                                      \
+    {                                                       \
+        if ((s) != (r))                                     \
+        {                                                   \
+            if (errno == EPIPE)   \
+                puts("\tServer went down. Disconnecting..."); \
+            else                                            \
+                perror(#s);                                 \
+            c;                                              \
+        }                                                   \
+    } while (0);
+
 char skname[PATH_MAX] = ""; // active connection
 int skfd = 0;
 
@@ -42,8 +55,6 @@ char *genRequest(size_t reqLen,
                  const char *dirname);
 
 /**
- * Si tenta di aprire una connessione al socket 'sockname' ogni 'msec' ms,
- * fino allo scadere del tempo 'abstime'
  * @param sockname name of the socket
  * @param msec time interval between one connection try and another
  * @param abstime time to elapse before unsuccessfully returning
@@ -108,7 +119,7 @@ int openFile(const char *pathname, int flags)
     char *req;
     ec_z(req = genRequest(reqLen, OPEN_FILE, cflags, 0, pathLen, 0, 0, path, "", ""), free(path); return -1);
     free(path);
-    ec_n(writen(skfd, req, reqLen), reqLen, free(req); return -1);
+    ec_n_PIPE(writen(skfd, req, reqLen), reqLen, free(req); return -1);
     free(req);
 
     // GET RESPONSE
@@ -157,7 +168,7 @@ int readFile(const char *pathname, void **buf, size_t *size)
     char *req;
     ec_z(req = genRequest(reqLen, READ_FILE, 0, 0, pathLen, 0, 0, path, "", ""), free(path); return -1);
     free(path);
-    ec_n(writen(skfd, req, reqLen), reqLen, free(req); return -1);
+    ec_n_PIPE(writen(skfd, req, reqLen), reqLen, free(req); return -1);
     free(req);
 
     // GET RESPONSE
@@ -201,7 +212,7 @@ int readNFiles(int N, const char *dirname)
     size_t reqLen = REQ_LEN_SIZE + dirnameLen * sizeof(char);
     char *req;
     ec_z(req = genRequest(reqLen, READN_FILES, 0, N, 0, dirnameLen, 0, "", dirname, ""), return -1);
-    ec_n(writen(skfd, req, reqLen), reqLen, free(req); return -1);
+    ec_n_PIPE(writen(skfd, req, reqLen), reqLen, free(req); return -1);
     free(req);
 
     // GET RESPONSE
@@ -255,7 +266,7 @@ int writeFile(const char *pathname, const char *dirname)
 
     ec_z(req = genRequest(reqLen, WRITE_FILE, 0, 0, pathLen, dirnameLen, size, path, dirname, buf), free(buf); free(path); return -1);
     free(path);
-    ec_n(writen(skfd, req, reqLen), reqLen, free(req); free(buf); return -1);
+    ec_n_PIPE(writen(skfd, req, reqLen), reqLen, free(req); free(buf); return -1);
     free(req);
     free(buf);
 
@@ -302,13 +313,12 @@ int appendToFile(const char *pathname, void *buf, size_t size, const char *dirna
     // SEND REQUEST
     unsigned short pathLen = strnlen(path, PATH_MAX);
     unsigned short dirnameLen = 0;
-    // dirname ? dirnameLen=strnlen(dirname, PATH_MAX) : dirname;
     dirnameLen = dirname ? strnlen(dirname, PATH_MAX) : 0;
     size_t reqLen = REQ_LEN_SIZE + pathLen * sizeof(char) + dirnameLen * sizeof(char) + size;
     char *req;
     ec_z(req = genRequest(reqLen, APPEND, 0, 0, pathLen, dirnameLen, size, path, dirname, buf), free(path); return -1);
     free(path);
-    ec_n(writen(skfd, req, reqLen), reqLen, free(req); return -1);
+    ec_n_PIPE(writen(skfd, req, reqLen), reqLen, free(req); return -1);
     free(req);
 
     // GET RESPONSE
@@ -355,7 +365,7 @@ int lockFile(const char *pathname)
     char *req;
     ec_z(req = genRequest(reqLen, LOCK_FILE, 0, 0, pathLen, 0, 0, path, "", ""), free(path); return -1);
     free(path);
-    ec_n(writen(skfd, req, reqLen), reqLen, free(req); return -1);
+    ec_n_PIPE(writen(skfd, req, reqLen), reqLen, free(req); return -1);
     free(req);
 
     // GET RESPONSE
@@ -389,7 +399,7 @@ int unlockFile(const char *pathname)
     char *req;
     ec_z(req = genRequest(reqLen, UNLOCK_FILE, 0, 0, pathLen, 0, 0, path, "", ""), free(path); return -1);
     free(path);
-    ec_n(writen(skfd, req, reqLen), reqLen, free(req); return -1);
+    ec_n_PIPE(writen(skfd, req, reqLen), reqLen, free(req); return -1);
     free(req);
 
     // GET RESPONSE
@@ -422,7 +432,7 @@ int closeFile(const char *pathname)
     char *req;
     ec_z(req = genRequest(reqLen, CLOSE_FILE, 0, 0, pathLen, 0, 0, path, "", ""), free(path); return -1);
     free(path);
-    ec_n(writen(skfd, req, reqLen), reqLen, free(req); return -1);
+    ec_n_PIPE(writen(skfd, req, reqLen), reqLen, free(req); return -1);
     free(req);
 
     // GET RESPONSE
@@ -455,7 +465,7 @@ int removeFile(const char *pathname)
     char *req;
     ec_z(req = genRequest(reqLen, REMOVE_FILE, 0, 0, pathLen, 0, 0, path, "", ""), free(path); return -1);
     free(path);
-    ec_n(writen(skfd, req, reqLen), reqLen, free(req); return -1);
+    ec_n_PIPE(writen(skfd, req, reqLen), reqLen, free(req); return -1);
     free(req);
 
     // GET RESPONSE
@@ -482,6 +492,9 @@ int removeFile(const char *pathname)
     return res ? -1 : 0;
 }
 
+/**
+ * @returns Request on success, NULL on error
+ */
 char *genRequest(size_t reqLen,
                  char op,
                  char flags,
@@ -517,7 +530,10 @@ char *genRequest(size_t reqLen,
 
     return buf;
 }
-
+/**
+ * (server might shutdown while reading)
+ * @returns evictedFile on success, NULL on error
+ */
 evictedFile *readEvicted()
 {
     evictedFile *f;

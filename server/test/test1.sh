@@ -7,7 +7,6 @@ WHT_LINE="echo -e \"$BWHT
 $REG\""
 #run server in background
 valgrind --leak-check=full bin/server test/conf/1.txt &
-# gdb --args bin/server test/conf/1.txt
 S_PID=$!
 # export S_PID
 

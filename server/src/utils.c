@@ -59,51 +59,6 @@ writen(int fd, void *ptr, size_t n)
 }
 #pragma GCC diagnostic pop
 
-// Non rimuove newline \n
-char *readLineFromFILEn(char *inputfer, unsigned int len, FILE *fp)
-{
-    char *res = fgets(inputfer, len, fp);
-
-    if (res == NULL)
-        return res;
-
-    return inputfer;
-}
-
-// Rimuove il newline \n
-char *readLineFromFILE(char *buffer, unsigned int len, FILE *fp)
-{
-    char *res = fgets(buffer, len, fp);
-
-    if (res == NULL)
-        return res;
-
-    /* remove the useless newline character */
-    char *newline = strchr(buffer, '\n');
-    if (newline)
-    {
-        *newline = '\0';
-    }
-    return buffer;
-}
-
-// Mette il content del file in buf
-// !!! if file is bigger than bufSize, it does nothing
-int myRead(const char *path, char *buf, size_t bufSize)
-{
-    // path assoluto richiesto
-    int fd, bytesRead;
-    ec_neg1(fd = open(path, O_RDONLY),return -1); // e se venisse interrotta da un segnale?
-    // if (fd = open(path,O_RDONLY)) return 0;
-    ec_neg1(bytesRead = readn(fd, buf, bufSize),return -1);
-    ec_neg1(close(fd),return -1); // e se venisse interrotta da un segnale?
-    return bytesRead;
-}
-
-
-// READ CONFIG FILE
-// TEST OK
-
 /**
  * Finds a char* value after a "[string]="
  * @returns NULL on error, desired string on success

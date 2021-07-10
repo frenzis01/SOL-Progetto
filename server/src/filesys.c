@@ -2,7 +2,6 @@
 
 #pragma region
 
-
 // error messages
 #define E_DATA_INTERNAL BRED "INTERNAL ERROR: FILESYS FAILURE" REG
 
@@ -14,11 +13,11 @@
     }
 
 // if NOTZERO then FAIL
-#define ec_nz_f(s)                                  \
-    if (s)                                          \
-    {                                               \
+#define ec_nz_f(s)           \
+    if (s)                   \
+    {                        \
         perror(BRED #s REG); \
-        return -1;                                  \
+        return -1;           \
     }
 
 #define LOCKFILE pthread_mutex_lock(&(fptr->mutex))
@@ -70,7 +69,7 @@ int readFile(char *path, evictedFile **toRet, Client *client, _Bool readN)
 
     if ((fptr = storeSearch(path)) == NULL)
     {
-        if (errno == ENOMEM)
+        if (errno == ENOMEM)    // malloc failed
         {
             UNLOCKSTORE;
             return -1;
@@ -79,7 +78,7 @@ int readFile(char *path, evictedFile **toRet, Client *client, _Bool readN)
         {
             ec_nz(UNLOCKSTORE, return -1);
         }
-        return 1; // file non trovato
+        return 1; // file not found
     }
 
     // READERS / WRITERS paradigm
@@ -115,7 +114,8 @@ int readFile(char *path, evictedFile **toRet, Client *client, _Bool readN)
     // READ DONE
 
     ec_nz_f(LOCKFILE);
-    fptr->fdCanWrite = 0;
+    if (!errnobk)
+        fptr->fdCanWrite = 0;
     fptr->readers--;
     if (fptr->readers == 0)
     {
@@ -126,8 +126,6 @@ int readFile(char *path, evictedFile **toRet, Client *client, _Bool readN)
     errnobk ? errno = errnobk : errnobk;
     if (errno == EACCES)
         return 1;
-    // if (errno)
-    //     return -1;
     return 0; // success
 }
 
@@ -303,7 +301,8 @@ int appendToFile(char *path, char *content, size_t size, Client *client, queue *
     ec_nz_f(UNLOCKSTORE);
 
     ec_nz_f(LOCKFILE);
-    fptr->fdCanWrite = 0;
+    if (!errnobk)
+        fptr->fdCanWrite = 0;
     fptr->writers--;
     ec_nz_f(SIGNALGO);
     ec_nz_f(UNLOCKFILE);
@@ -428,8 +427,8 @@ int openFile(char *path, int createF, int lockF, Client *client, evictedFile **e
     }
 
     ec_nz_f(LOCKFILE);
-
-    fptr->fdCanWrite = 0;
+    if (!errnobk)
+        fptr->fdCanWrite = 0;
     fptr->writers--;
     ec_nz_f(SIGNALGO);
 
@@ -438,8 +437,6 @@ int openFile(char *path, int createF, int lockF, Client *client, evictedFile **e
     errnobk ? errno = errnobk : errnobk;
     if (errno == EACCES)
         return 1;
-    // else if (errno)
-    //     return -1;
 
     return 0;
 }
@@ -483,7 +480,7 @@ int lockFile(char *path, Client *client)
     ec_nz_f(UNLOCKORDERING);
     ec_nz_f(UNLOCKFILE);
 
-    // if (O_LOCK)      !OPENED non ci interessa
+    // if (O_LOCK)
     if (fptr->lockedBy && fptr->lockedBy != client->fd)
     {
         queueEnqueue(fptr->lockersPending, client);
@@ -496,7 +493,8 @@ int lockFile(char *path, Client *client)
     }
 
     ec_nz_f(LOCKFILE);
-    fptr->fdCanWrite = 0;
+    if (!errnobk)
+        fptr->fdCanWrite = 0;
     fptr->writers--;
     ec_nz_f(SIGNALGO);
 
@@ -553,8 +551,6 @@ int unlockFile(char *path, Client *client)
     }
     else
     {
-        fptr->fdCanWrite = 0;
-
         Client *tmp = queueDequeue(fptr->lockersPending);
         if (tmp)
         {
@@ -566,14 +562,13 @@ int unlockFile(char *path, Client *client)
     }
 
     ec_nz_f(LOCKFILE);
-    fptr->fdCanWrite = 0;
+    if (!errnobk)
+        fptr->fdCanWrite = 0;
     fptr->writers--;
     ec_nz_f(SIGNALGO);
 
     ec_nz_f(UNLOCKFILE);
     errnobk ? errno = errnobk : errnobk;
-    // if (errno && errno != EACCES)
-    //     return -1;
     return toRet;
 }
 
@@ -622,7 +617,8 @@ int closeFile(char *path, Client *client)
     }
 
     ec_nz_f(LOCKFILE);
-    fptr->fdCanWrite = 0;
+    if (!fptr->lockedBy)
+        fptr->fdCanWrite = 0;
     fptr->writers--;
     ec_nz_f(SIGNALGO);
     ec_nz_f(UNLOCKFILE);
@@ -670,14 +666,13 @@ int removeFile(char *path, Client *client, evictedFile **evicted)
     ec_nz_f(UNLOCKORDERING);
     ec_nz_f(UNLOCKFILE);
     // if I don't unlock these two, when I remove the file i'll free a file with a thread (myself)
-    // owning these two mutexes 
+    // owning these two mutexes
 
     // if (!O_LOCK_byClient)
     if (fptr->lockedBy != client->fd)
     {
         errno = EACCES;
         ec_nz_f(LOCKFILE);
-        fptr->fdCanWrite = 0;
         fptr->writers--;
         ec_nz(SIGNALGO, return -1;);
         ec_nz_f(UNLOCKFILE);
@@ -933,7 +928,10 @@ evictedFile *storeEviction(_Bool ignoreLocks, char *pathToAvoid, _Bool ignoreEmp
     * LRU or FIFO doesn't matter 
     */
     data *curr = (store.files)->head;
-    while (!errno && curr && ((cmpPath(curr->data, pathToAvoid) == 1) || (isEmpty(curr->data) && ignoreEmpty) || (isLocked(curr->data) && ignoreLocks)))
+    while (!errno && curr &&
+           ((cmpPath(curr->data, pathToAvoid) == 1) ||
+            (isEmpty(curr->data) && ignoreEmpty) ||
+            (isLocked(curr->data) && ignoreLocks)))
     {
         curr = curr->next;
     }
@@ -996,7 +994,7 @@ int storeStats()
         store.maxSizeReached,
         store.currSize,
         store.nEviction);
-    ec_neg1(queueCallback(store.files, printPath),return -1);
+    ec_neg1(queueCallback(store.files, printPath), return -1);
     puts(BCYN "-----END\n" REG);
     ec_nz_f(UNLOCKSTORE);
     return 0;
@@ -1050,7 +1048,6 @@ void freeFile(void *arg)
         return;
     errno = 0;
     fnode *fptr = (fnode *)arg;
-    // Assumiamo che il caller abbia sistemato mutex e cond
     free(fptr->path);
     free(fptr->content);
 
@@ -1110,6 +1107,8 @@ int storeDestroy()
     return 0;
 }
 
+
+// UTILITIES
 // Compare functions
 int cmpFd(void *a, void *b)
 {
@@ -1145,8 +1144,7 @@ int cmpPathChar(void *a, void *b)
     return 0;
 }
 
-// These are just some utilities
-
+// These are just some print utilities
 void printPath(void *arg)
 {
     fnode *fptr = arg;
@@ -1161,19 +1159,20 @@ void printFD(void *arg)
     return;
 }
 
-void printString(const char *str, size_t len){
+void printString(const char *str, size_t len)
+{
     for (size_t i = 0; i < len; i++)
     {
-        ec_neg(printf("%c", str[i]), return);
+        ec_neg(printf("%c", str[i]), return );
     }
 }
 void printEvicted(void *arg)
 {
     evictedFile *c = arg;
-    ec_neg(printf(BMAG "EVCTD -- PATH: %s | CONTENT: ", c->path), return);
-    printString(c->content,c->size);
-    ec_neg(printf(REG "\n"), return);
-    ec_neg(printf(" LOCKERS:\n"), return);
+    ec_neg(printf(BMAG "EVCTD -- PATH: %s | CONTENT: ", c->path), return );
+    printString(c->content, c->size);
+    ec_neg(printf(REG "\n"), return );
+    ec_neg(printf(" LOCKERS:\n"), return );
     queueCallback(c->notifyLockers, printFD);
     errno = 0;
     return;
@@ -1182,12 +1181,12 @@ void printEvicted(void *arg)
 void printFnode(void *arg)
 {
     fnode *c = arg;
-    ec_neg(printf(BGRN "FNODE -- PATH: %s | CONTENT: ", c->path), return);
-    printString(c->content,c->size);
-    ec_neg(printf(REG "\n"), return);
-    ec_neg(printf(" LOCKERS:\n"), return);
+    ec_neg(printf(BGRN "FNODE -- PATH: %s | CONTENT: ", c->path), return );
+    printString(c->content, c->size);
+    ec_neg(printf(REG "\n"), return );
+    ec_neg(printf(" LOCKERS:\n"), return );
     queueCallback(c->lockersPending, printFD);
-    ec_neg(printf(" OPENERS:\n"), return);
+    ec_neg(printf(" OPENERS:\n"), return );
     queueCallback(c->openBy, printFD);
     errno = 0;
 

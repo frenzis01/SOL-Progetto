@@ -202,12 +202,10 @@ void freeStuff(char **str_arr, int i_max)
     int i = 0;
     while (str_arr != NULL && i < i_max)
     {
-        /* printf("%s , ", str_arr[i]); */
         free(str_arr[i++]);
     }
     if (str_arr != NULL)
         free(str_arr);
-    /* puts(""); */
 }
 
 int cmpString(void *a, void *b)

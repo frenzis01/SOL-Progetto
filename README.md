@@ -1,2 +1,2 @@
 # SOL-Progetto
-Multi-threaded file storage server implement in C
+Multi-threaded file storage server implemented in C

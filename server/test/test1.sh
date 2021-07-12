@@ -5,10 +5,18 @@ REG="\x1b[0m"
 WHT_LINE="echo -e \"$BWHT
 ---------------------------------
 $REG\""
+
+
+echo "
+    ...Removing log.txt and read/evicted folders...
+"
+rm -r -f test/read/* test/evicted/* log.txt
+
 #run server in background
 valgrind --leak-check=full bin/server test/conf/1.txt &
 S_PID=$!
-# export S_PID
+
+start=$SECONDS
 
 # None of these requests will be sent to the server because of '-h'
 bin/client -h -f sock -t 200 -p -E test/evicted -w mock/1,n=2 -W mock/1/3,mock/2/8 -D test/evicted -r mock/1/3,mock/2/8 -d test/read -R -d test/read -w mock/1 -l mock/2/5,mock/2/6 -u mock/2/6 -c mock/2/5
@@ -29,7 +37,8 @@ echo -e $BWHT '
 ' $REG
 #writeFile/appendToFile + readNfiles     -> test/read contains 1/1,...,1/4, 2/5,...2/8
 bin/client -t 200 -p -f sock -w mock/1 -w mock/2 -R -d test/read
-echo -e $BWHT '     Have a look at read files...'
+echo -e $BWHT "
+    Let's have a look at read files..."
 ls test/read/home/francis/Documenti/SOL/server/mock/1 test/read/home/francis/Documenti/SOL/server/mock/2
 eval "$WHT_LINE"
 
@@ -51,7 +60,7 @@ bin/client -t 220 -p -f sock -l mock/2/7 -c mock/2/7
 echo -e "$BWHT
     ...KILLING SERVER...
 "
-# bash -c 'kill -1 $S_PID'
+
 kill -1 $S_PID
 
 wait $S_PID
@@ -61,6 +70,12 @@ echo -e $BWHT '
 
 ---------------FINE--------------
 
-' $REG
-echo -e $BWHT 'Well done!
-' $REG
+'
+
+duration=$(( SECONDS - start ))
+
+echo -e $BWHT "
+
+    Well done! (${duration}s)
+
+" $REG

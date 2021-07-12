@@ -2,43 +2,52 @@
 #TEST3 (aka stress test)
 BWHT="\033[1;37m"
 REG="\x1b[0m"
-
 export BWHT
+
+echo "
+    ...Removing log.txt and read/evicted folders...
+"
+rm -r -f test/read/* test/evicted/* log.txt
 
 #run server in background
 bin/server test/conf/2_1.txt &
 export S_PID=$!
-# export S_PID
 
 echo -e $BWHT "
 
+    STARTING TEST3
+    10 Clients are running simultaneously without '-p' option $REG
 
-STARTING SERVER $S_PID
+    Errors, if any, will be printed
 
+"
 
-" $REG
-sleep 1
-
-#hide kill termination message using redirection
-(bash -c "sleep 30 ; killall -9 spawnclients.sh; echo -e \"$BWHT
-    KILLING SERVER and CLIENTS
-\" ; kill -2 $S_PID" &) > /dev/null
-C_PID=$!
+start=$SECONDS
 
 for i in {1..10}; do
     test/spawnclients.sh &
 done
 
-wait $C_PID
+sleep 2
+
+echo -e "
+    KILLING SERVER and CLIENTS
+"
+kill -2 $S_PID
+killall -9 spawnclients.sh
+
+# wait $C_PID
 echo -e $BWHT '
 
-    ...Clients who are trying to connect to the server will die in 10s...
+    ...Clients who are waiting for openConnection() to fail will die in 10s...
 
 ' $REG
-sleep 13
+sleep 12
 
-echo -e $BWHT '
+duration=$(( SECONDS - start ))
 
-    Well done!
+echo -e $BWHT "
 
-' $REG
+    Well done! (${duration}s)
+
+" $REG

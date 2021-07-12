@@ -24,7 +24,6 @@
 #include <conn.h>
 #include <protocol.h>
 
-
 // Structs
 typedef struct
 {
@@ -33,22 +32,23 @@ typedef struct
     size_t nfiles;
     size_t evictPolicy;
     char *sockname;
-} ServerData;   // init metadata
+} ServerData; // init metadata
 typedef struct
 {
     size_t tid;
     pthread_t *sigHandler;
-} workerArgs;   // worker arguments
+} workerArgs; // worker arguments
 
 // Prototypes
 void *worker(void *arg);
 int readConfig(char *configPath, ServerData *new);
-int parseRequest (char *str, Request *req);
+int parseRequest(char *str, Request *req);
 void *dispatcher(void *arg);
 int sendFileToClient(evictedFile *fptr, int fd);
 int notifyPendingLockers(queue *lockers, int msg);
 void *signalHandler(void *args);
 int removeClient(int fd, queue **notifyLockers);
+int manageExit(int fd);
 
 // Useful macros and constants
 #pragma region
@@ -66,25 +66,55 @@ int removeClient(int fd, queue **notifyLockers);
         c;             \
     }
 
-#define log(s, i, c)                                                      \
-    res = (s);                                                            \
-    errnosave = errno;                                                    \
-    strerror_r(errno, errnoBuf, 200);                                     \
-    if (res == -1)                                                        \
-    {                                                                     \
-        perror(BCYN "INTERNAL FATAL ERROR" REG);                          \
-        c;                                                                \
-    }                                                                     \
-    snprintf(toLog, LOGBUF_LEN, "%ld__%d__" #s "__%s", i, res, errnoBuf); \
-    p(puts(toLog));                                                          \
-    eo_af(LoggerLog(toLog, strlen(toLog)), WK_DIE_ON_ERR);
+// used by workers
+#define ec_neg1_SKT(s, c)                              \
+    do                                                 \
+    {                                                  \
+        if ((s) == (-1))                               \
+        {                                              \
+            if (errno == ECONNRESET || errno == EBADF) \
+            {                                          \
+                ec_neg1(manageExit(fd), c);            \
+            }                                          \
+            else                                       \
+            {                                          \
+                perror(#s);                            \
+                c;                                     \
+            }                                          \
+        }                                              \
+    } while (0);
+
+#define log(s, c)                                                                                    \
+    do                                                                                               \
+    {                                                                                                \
+        res = (s);                                                                                   \
+        if (res == -1)                                                                               \
+        {                                                                                            \
+            perror(BCYN "INTERNAL FATAL ERROR" REG);                                                 \
+            c;                                                                                       \
+        }                                                                                            \
+        if (res == 1)                                                                                \
+        {                                                                                            \
+            errnosave = errno;                                                                       \
+        }                                                                                            \
+        else                                                                                         \
+            errnosave = 0;                                                                           \
+        strerror_r(errno, errnoBuf, 200);                                                            \
+        snprintf(toLog, REQstr_LEN + ERRNOBUF_LEN, "%ld__%s__%d__%s", myTid, reqStr, res, errnoBuf); \
+        p(puts(toLog));                                                                              \
+        eo_af(LoggerLog(toLog, strlen(toLog)), c);                                                   \
+    } while (0);
+
+#define logEvicted(evict, f, c)                                                                                                                                            \
+    ec_neg(snprintf(toLog, REQstr_LEN + ERRNOBUF_LEN, "%ld__%d__%s to %d: %s__%ld", myTid, req->op, evict ? "Evicting" : "Sending", fd, f->path, f->size), WK_DIE_ON_ERR); \
+    p(puts(toLog));                                                                                                                                                        \
+    eo_af(LoggerLog(toLog, strlen(toLog)), c);
 
 #define PUSH_REQUEST(x, err_handle)                   \
     ec_nz(pthread_mutex_lock(&lockReq), err_handle);  \
     eo_af(queueEnqueue(requests, x), err_handle);     \
     ec_nz(pthread_cond_signal(&condReq), err_handle); \
     ec_nz(pthread_mutex_unlock(&lockReq), err_handle);
-
 
 // Some constants
 #define BUF 8192
@@ -96,7 +126,6 @@ int removeClient(int fd, queue **notifyLockers);
 #define HARSH_QUIT 2
 #define HUP_QUIT 1
 #pragma endregion
-
 
 // COMMUNICATION BETWEEN THREADS
 
@@ -292,16 +321,12 @@ void *dispatcher(void *arg)
                     else
                     {
                         currNClient++;
-                        // ec_z(addClient(fd_c),DS_DIE_ON_ERR);
-                        Client *tmp = addClient(fd_c);
+                        Client *tmp = addClient(fd_c); // add new client to Clients' structure
                         ec_z(tmp, DS_DIE_ON_ERR);
                         p(printf(BYEL "Dispatcher - New connection accepted : %d - %ld\n" REG, tmp->fd, currNClient));
-                        if (snprintf(toLog, LOGBUF_LEN, "CLIENT ADDED: %d - %ld", fd_c, currNClient) < 0)
-                        {
-                            DS_DIE_ON_ERR;
-                        }
+                        ec_neg(snprintf(toLog, LOGBUF_LEN, "CLIENT ADDED: %d - %ld", fd_c, currNClient), DS_DIE_ON_ERR;);
                         eo_af(LoggerLog(toLog, strlen(toLog)), DS_DIE_ON_ERR);
-                        FD_SET(fd_c, &set);
+                        FD_SET(fd_c, &set); // listen to new fd
                         if (fd_c > fd_hwm)
                             fd_hwm = fd_c;
                     }
@@ -312,7 +337,7 @@ void *dispatcher(void *arg)
                     ec_neg1(readn(MANAGER_READ, &fdFromWorker, sizeof(int)), DS_DIE_ON_ERR);
                     if (fdFromWorker < 0) // a client left
                     {                     // The worker who wrote has already removed the client from the filesys,
-                                          //    but didn't close its fd  
+                                          //    but didn't close its fd
                         currNClient--;
                         fdFromWorker *= -1;
                         p(printf(BYEL "Dispatcher - Removing client %d - %ld\n" REG, fdFromWorker, currNClient));
@@ -320,7 +345,7 @@ void *dispatcher(void *arg)
                         ec_neg1(snprintf(toLog, LOGBUF_LEN, "CLIENT LEFT: %d - %ld", fdFromWorker, currNClient), DS_DIE_ON_ERR);
                         eo_af(LoggerLog(toLog, strlen(toLog)), DS_DIE_ON_ERR);
 
-                        if (NoMoreClients() && myShutdown == HUP_QUIT)  // soft exiting
+                        if (NoMoreClients() && myShutdown == HUP_QUIT) // soft exiting
                         {
                             goto dispatcher_cleanup;
                         }
@@ -428,19 +453,19 @@ void *worker(void *args)
     Client *requestor = NULL;
     int fd, res = 0, errnosave = 0;
     char
-        toLog[LOGBUF_LEN],
+        toLog[REQstr_LEN + ERRNOBUF_LEN],
         errnoBuf[ERRNOBUF_LEN],
-        deathMSG[14 + sizeof(size_t)];
+        deathMSG[14 + sizeof(size_t)],
+        *reqStr = NULL;
     Request *req = NULL;
     evictedFile *evicted = NULL;
     queue
-        *evictedList = NULL,
-        *notifyLockers = NULL;
+        *evictedList = NULL;
     size_t nEvicted = 0;
 
     snprintf(deathMSG, 14 + sizeof(size_t), "WORKER DIED: %ld", myTid); // will be used in WK_DIE_ON_ERR
 
-    while (myShutdown != HARSH_QUIT)    // Slightly unnecessary, main() will send termination requests
+    while (myShutdown != HARSH_QUIT) // Slightly unnecessary, main() will send termination requests
     {
         // GET A REQUEST
         ec_nz(pthread_mutex_lock(&lockReq), {});
@@ -465,74 +490,68 @@ void *worker(void *args)
 
         if (!req && errno == ENOTCONN) // client closed the socket
         {
-            ec_neg1(removeClient(fd, &notifyLockers), WK_DIE_ON_ERR);
-            // if there was at least one pending locker on a file O_LOCKed by
-            // the removed client, we must notify it of the successful lockFile()
-            ec_neg1(notifyPendingLockers(notifyLockers, SUCCESS), WK_DIE_ON_ERR);
-            notifyLockers = NULL;
-
-            // if there are no more clients and we are HUP-exiting,
-            // dispatcher will manage exit (and log client's disconnection)
-            fd *= -1;
-            ec_neg1(writen(WORKER_WRITE, &fd, sizeof(int)), WK_DIE_ON_ERR);
+            ec_neg1(manageExit(fd), WK_DIE_ON_ERR);
             continue;
         }
-        else if (!req)  // Something bad happened
+        else if (!req) // Something bad happened
         {
             WK_DIE_ON_ERR;
         }
 
         p(puts(BGRN "Request accepted" REG));
-        p(printRequest(req, fd));
+        ec_z(reqStr = reqToString(req, fd), WK_DIE_ON_ERR);
+        p(puts(reqStr));
         switch (req->op)
         {
         case OPEN_FILE:
-            log(openFile(req->path, req->o_creat, req->o_lock, req->client, &evicted), myTid, WK_DIE_ON_ERR);
+            log(openFile(req->path, req->o_creat, req->o_lock, req->client, &evicted), WK_DIE_ON_ERR);
             break;
 
         case READ_FILE:
-            log(readFile(req->path, &evicted, req->client, 0), myTid, WK_DIE_ON_ERR);
+            log(readFile(req->path, &evicted, req->client, 0), WK_DIE_ON_ERR);
             break;
 
         case READN_FILES:
-            log(readNfiles(req->nfiles, &evictedList, req->client), myTid, WK_DIE_ON_ERR);
+            log(readNfiles(req->nfiles, &evictedList, req->client), WK_DIE_ON_ERR);
             break;
 
         case APPEND:
-            log(appendToFile(req->path, req->append, req->appendLen, req->client, &evictedList, 0), myTid, WK_DIE_ON_ERR);
+            log(appendToFile(req->path, req->append, req->appendLen, req->client, &evictedList, 0), WK_DIE_ON_ERR);
             break;
 
         case WRITE_FILE:
-            log(appendToFile(req->path, req->append, req->appendLen, req->client, &evictedList, 1), myTid, WK_DIE_ON_ERR);
+            log(appendToFile(req->path, req->append, req->appendLen, req->client, &evictedList, 1), WK_DIE_ON_ERR);
             break;
 
         case LOCK_FILE:
-            log(lockFile(req->path, req->client), myTid, WK_DIE_ON_ERR);
+            log(lockFile(req->path, req->client), WK_DIE_ON_ERR);
             if (errnosave == EACCES) // in this case, the client has to wait
             {
                 freeRequest(req);
+                free(reqStr);
+                reqStr = NULL;
                 req = NULL;
-                continue;   // Worker can handle new requests in the meantime
+                continue; // Worker can handle new requests in the meantime
             }
             break;
 
         case UNLOCK_FILE:
-            log(unlockFile(req->path, req->client), myTid, WK_DIE_ON_ERR);
+            log(unlockFile(req->path, req->client), WK_DIE_ON_ERR);
             if (res > 1) // notify new lock owner who didn't receive feedback in the first place
             {
                 errnosave = 0;
-                ec_neg1(writen(res, &errnosave, sizeof(int)), WK_DIE_ON_ERR);
+                ec_neg1_SKT(writen(res, &errnosave, sizeof(int)), WK_DIE_ON_ERR);
                 ec_neg1(writen(WORKER_WRITE, &res, sizeof(int)), WK_DIE_ON_ERR);
                 // put res(fd) back in select set
             }
             break;
 
         case CLOSE_FILE:
-            log(closeFile(req->path, req->client), myTid, WK_DIE_ON_ERR);
+            log(closeFile(req->path, req->client), WK_DIE_ON_ERR);
             break;
 
         case REMOVE_FILE:
-            log(removeFile(req->path, req->client, &evicted), myTid, WK_DIE_ON_ERR);
+            log(removeFile(req->path, req->client, &evicted), WK_DIE_ON_ERR);
             break;
 
         default:
@@ -546,7 +565,7 @@ void *worker(void *args)
         {
             // reset errnosave in case of success
             errnosave = res == 0 ? res : errnosave;
-            ec_neg1(writen(fd, &errnosave, sizeof(int)), WK_DIE_ON_ERR);
+            ec_neg1_SKT(writen(fd, &errnosave, sizeof(int)), WK_DIE_ON_ERR);
         }
 
         if ((!evicted && !evictedList) &&
@@ -557,16 +576,17 @@ void *worker(void *args)
             // in this case, we have to notify the client he has not to expect
             // any evicted files
             nEvicted = 0;
-            ec_neg1(writen(fd, &nEvicted, sizeof(size_t)), WK_DIE_ON_ERR);
+            ec_neg1_SKT(writen(fd, &nEvicted, sizeof(size_t)), WK_DIE_ON_ERR);
         }
         if (evictedList) // Send back to client and notify pending lockers
         {
             // Can be capacityVictims or readNfiles target
-            ec_neg1(writen(fd, &(evictedList->size), sizeof(size_t)), WK_DIE_ON_ERR);
+            ec_neg1_SKT(writen(fd, &(evictedList->size), sizeof(size_t)), WK_DIE_ON_ERR);
             evictedFile *curr = queueDequeue(evictedList);
             while (curr)
             {
                 ec_neg1(sendFileToClient(curr, fd), WK_DIE_ON_ERR);
+                logEvicted(req->op != READN_FILES, curr, WK_DIE_ON_ERR);
                 if (req->op != READN_FILES) // if it is a victim
                 {
                     ec_neg1(notifyPendingLockers(curr->notifyLockers, ENOENT), WK_DIE_ON_ERR);
@@ -581,6 +601,7 @@ void *worker(void *args)
         {
             //Can be openVictim or readFile target or remove target
             ec_neg1(sendFileToClient(evicted, fd), WK_DIE_ON_ERR);
+            logEvicted(req->op != READ_FILE, evicted, WK_DIE_ON_ERR);
             if (req->op != READ_FILE) // if it is a victim or remove target
             {
                 ec_neg1(notifyPendingLockers(evicted->notifyLockers, ENOENT), WK_DIE_ON_ERR);
@@ -591,23 +612,23 @@ void *worker(void *args)
 
         evicted = NULL;
         evictedList = NULL;
-        notifyLockers = NULL;
 
         // We need to put the ready fd back in the select's set
         ec_neg1(writen(WORKER_WRITE, &fd, sizeof(int)), WK_DIE_ON_ERR);
         freeRequest(req);
+        free(reqStr);
+        reqStr = NULL;
         req = NULL;
     }
 
 worker_cleanup:
     if (req)
         freeRequest(req);
+    free(reqStr);
     queueDestroy(evictedList);
     freeEvicted(evicted);
-    queueDestroy(notifyLockers);
     evicted = NULL;
     evictedList = NULL;
-    notifyLockers = NULL;
     return NULL;
 }
 
@@ -631,7 +652,7 @@ int sendFileToClient(evictedFile *fptr, int fd)
     memcpy(buf + index, fptr->content, fptr->size);
 
     // Write to the client
-    ec_neg1(writen(fd, buf, len), free(buf); return -1;);
+    ec_neg1_SKT(writen(fd, buf, len), free(buf); return -1;);
     free(buf);
     return 0; // success
 }
@@ -677,7 +698,7 @@ int readConfig(char *configPath, ServerData *new)
     ec_neg1(conf_sizet(conf, "evictPolicy", &(new->evictPolicy)), free(new->sockname); return -1;);
 
     if (new->evictPolicy)
-        new->evictPolicy = 1;   // LRU
+        new->evictPolicy = 1; // LRU
 
     fclose(conf);
 
@@ -700,5 +721,22 @@ int removeClient(int fd, queue **notifyLockers)
     ec_z(*notifyLockers = storeRemoveClient(toRemove), return -1);
     ec_neg1(icl_hash_delete(clients, fdBuf, free, free), return -1);
     ec_nz(UNLOCKCLIENTS, return -1);
+    return 0;
+}
+
+int manageExit(int fd)
+{
+    queue *notifyLockers = NULL;
+    ec_neg1(removeClient(fd, &notifyLockers), queueDestroy(notifyLockers); return -1);
+    // if there was at least one pending locker on a file O_LOCKed by
+    // the removed client, we must notify it of the successful lockFile()
+    ec_neg1(notifyPendingLockers(notifyLockers, SUCCESS), queueDestroy(notifyLockers); return -1);
+    notifyLockers = NULL;
+
+    // if there are no more clients and we are HUP-exiting,
+    // dispatcher will manage exit (and log client's disconnection)
+    fd *= -1;
+    ec_neg1(writen(WORKER_WRITE, &fd, sizeof(int)), queueDestroy(notifyLockers); return -1);
+    queueDestroy(notifyLockers);
     return 0;
 }

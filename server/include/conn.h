@@ -36,6 +36,8 @@ typedef struct {
 
 #define UNLOCKCLIENTS pthread_mutex_unlock(&lockClients)
 #define LOCKCLIENTS pthread_mutex_lock(&lockClients)
+#define REQstr_LEN PATH_MAX + PATH_MAX + 100
+
 
 icl_hash_t *clients;
 pthread_mutex_t lockClients;
@@ -51,7 +53,7 @@ Client *addClient(int fd);
 
 _Bool NoMoreClients();
 
-void printRequest (Request *req, int fd);
+char *reqToString(Request *req, int fd);
 
 
 #endif

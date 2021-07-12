@@ -13,15 +13,12 @@ LIBS_SERVER_SO = lib/libqueue.so lib/libutils.so lib/liblogger.so lib/libfilesys
 
 #tests
 test1: test/test1.sh bin/client bin/server
-	rm -r -f test/read/* test/evicted/* sock
 	test/test1.sh
 
 test2: test/test2.sh bin/client bin/server
-	rm -r -f test/read/* test/evicted/* sock
 	test/test2.sh
 
 test3: test/test3.sh bin/client bin/server
-	rm -r -f test/read/* test/evicted/* sock
 	test/test3.sh
 
 bin/server: src/server.c $(LIBS_SERVER_SO)

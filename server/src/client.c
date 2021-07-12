@@ -16,26 +16,28 @@
 
 #pragma region
 #define FILESYS_err (errno == EACCES || errno == ENOENT || errno == EADDRINUSE || errno == EFBIG || errno == EINVAL)
-#define ec_api(s)                                                                    \
-    do                                                                               \
-    {                                                                                \
-        if (nanosleep(&interval, NULL) == (-1) || ((s) == (-1) && !(FILESYS_err)))   \
-        {                                                                            \
+#define ec_api(s)                                                                         \
+    do                                                                                    \
+    {                                                                                     \
+        if (nanosleep(&interval, NULL) == (-1) || ((s) == (-1) && !(FILESYS_err)))        \
+        {                                                                                 \
             if (errno && errno != ECONNRESET && errno != ENOTCONN && errno != EPIPE) \
-                perror(BRED #s REG);                                                 \
-            goto cleanup;                                                            \
-        }                                                                            \
+                perror(BRED #s REG);                                                      \
+            goto cleanup;                                                                 \
+        }                                                                                 \
     } while (0);
 
-#define ec_neg1_cli(s, c)                                          \
-    do                                                             \
-    {                                                              \
-        if ((s) == (-1))                                           \
-        {                                                          \
-            if (errno && errno != ENOTCONN && errno != ECONNRESET) \
-                perror(#s);                                        \
-            c;                                                     \
-        }                                                          \
+#define ec_neg1_cli(s, c)                                               \
+    do                                                                  \
+    {                                                                   \
+        if ((s) == (-1))                                                \
+        {                                                               \
+            if (errno == ETIME)                                         \
+                perror("Connection to the server failed");                            \
+            else if (errno && errno != ENOTCONN && errno != ECONNRESET) \
+                perror(#s);                                             \
+            c;                                                          \
+        }                                                               \
     } while (0);
 
 #define GET_DFLAG                                                               \
@@ -260,14 +262,15 @@ evictedFile *evictedWrap(char *path, char *content, size_t size)
  */
 int readFilesList(queue *files, const char *dirname)
 {
-    char *buf = NULL, *path = NULL;
+    void *buf = NULL;
+    char *path = NULL;
     int res = 0;
     size_t size = 0;
     evictedFile *f = NULL;
     while (!queueIsEmpty(files))
     {
         ec_z(buf = queueDequeue(files), continue);
-        ec_z(path = getAbsolutePath(buf), goto cleanup); // gonna need it to store on disk
+        ec_z(path = getAbsolutePath(buf), goto cleanup);
         free(buf);
         buf = NULL;
 
@@ -276,10 +279,11 @@ int readFilesList(queue *files, const char *dirname)
         if (res == SUCCESS)
         {
             // The files will be saved on disk by readFile
-            ec_api(readFile(path, (void **)&buf, &size));
-            if (dirname)
+            errno = 0;
+            ec_api(res = readFile(path, &buf, &size));
+            if (dirname && res == SUCCESS)
             {
-                f = evictedWrap(path, buf, size);
+                ec_z(f = evictedWrap(path, buf, size), goto cleanup);
                 ec_neg1(storeFileInDir(f, dirname), goto cleanup);
                 free(f);
                 f = NULL;

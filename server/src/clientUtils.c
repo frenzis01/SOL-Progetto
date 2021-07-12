@@ -1,4 +1,5 @@
 #include <clientUtils.h>
+#include <time.h>
 
 int printString(const char *str, size_t len)
 {
@@ -15,7 +16,7 @@ int printEvictedPath(void *arg)
 }
 
 /**
- * Useful only for text-only files
+ * Useful exclusively for text-only files
  */
 int printEvicted(void *arg)
 {
@@ -106,25 +107,33 @@ store_cleanup:
     return -1;
 }
 
-/**
- * @param path path to be 'absolutified'. Can be either absolute or relative
- * @returns absolute path corresponding to 'path'
- */
 char *getAbsolutePath(const char *path)
 {
     if (!path)
         return NULL;
     char *absPath = NULL;
-    if (path == strchr(path, '/')) // path is absolute
+    size_t len = 0;
+    if (path != strchr(path, '/') && !strchr(path, '.')) // path is relative and no dots to be expanded
     {
-        ec_z(absPath = calloc((strnlen(path, PATH_MAX) + 1), sizeof(char)), return NULL);
-        ec_neg(snprintf(absPath, PATH_MAX, "%s", path), return NULL);
+        // realpath fails if the file doesn't actually exist...
+        // so, expand manually
+        char cwd[PATH_MAX];
+        ec_z(getcwd(cwd, sizeof(cwd)), return NULL);
+        ec_z(absPath = calloc(strnlen(path, PATH_MAX) + strnlen(cwd, PATH_MAX) + 2, sizeof(char)),
+             return NULL);
+        ec_neg(snprintf(absPath, PATH_MAX, "%s/%s", cwd, path), return NULL);
         return absPath;
     }
-    char cwd[PATH_MAX];
-    ec_z(getcwd(cwd, sizeof(cwd)), return NULL);
-    ec_z(absPath = calloc(strnlen(path, PATH_MAX) + strnlen(cwd, PATH_MAX) + 2, sizeof(char)),
-         return NULL);
-    ec_neg(snprintf(absPath, PATH_MAX, "%s/%s", cwd, path), return NULL);
-    return absPath;
+    // some dots may have to be expanded
+    if (path == strchr(path, '/')) // path is absolute
+    {
+        len = strnlen(path, PATH_MAX) + 1;
+    }
+    else
+        len = PATH_MAX;
+    ec_z(absPath = calloc(len, sizeof(char)), return NULL);
+    char *toRet = realpath(path, absPath);
+    if (!toRet)
+        free(absPath);
+    return toRet;
 }

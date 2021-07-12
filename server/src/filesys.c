@@ -69,7 +69,7 @@ int readFile(char *path, evictedFile **toRet, Client *client, _Bool readN)
 
     if ((fptr = storeSearch(path)) == NULL)
     {
-        if (errno == ENOMEM)    // malloc failed
+        if (errno == ENOMEM) // malloc failed
         {
             UNLOCKSTORE;
             return -1;
@@ -97,7 +97,7 @@ int readFile(char *path, evictedFile **toRet, Client *client, _Bool readN)
 
     fptr->readers++; // Readers count update
 
-    ec_nz_f(UNLOCKORDERING); // avanti il prossimo
+    ec_nz_f(UNLOCKORDERING);
     ec_nz_f(UNLOCKFILE);
 
     // if (O_LOCK || !OPENED)
@@ -108,7 +108,7 @@ int readFile(char *path, evictedFile **toRet, Client *client, _Bool readN)
     else
     {
         // READ - BINARY
-        ec_z_f(*toRet = copyFnode(fptr, 0), /* errno set. perror has already been called */);
+        ec_z(*toRet = copyFnode(fptr, 0), return -1;);
     }
 
     // READ DONE
@@ -144,7 +144,7 @@ int readNfiles(int n, queue **toRet, Client *client)
     data *curr = NULL; //we'll need this in case of FIFO evictPolicy
 
     // Holds STORE for the entire process to ensure that the files read are distinguished
-    ec_nz_f(LOCKSTORE);
+    ec_nz(LOCKSTORE, queueDestroy(*toRet); return -1);
 
     if (n <= 0 || n > store.currNfiles)
         n = store.currNfiles;
@@ -159,7 +159,7 @@ int readNfiles(int n, queue **toRet, Client *client)
      * 
      * @note we have two slightly different behaviour based on the evict policy
      */
-    while (!errno && nread != store.currNfiles && n--)
+    while (nread != store.currNfiles && n--)
     {
         fnode *tmp = NULL;
         if (store.evictPolicy == 1)
@@ -188,17 +188,21 @@ int readNfiles(int n, queue **toRet, Client *client)
         // if queueEnqueue or readFile fails, it sets errno, and we'll exit from the loop
         // LOCKSTORE held, so we are sure to find tmp->path during readFile
         int readFileRes = readFile(tmp->path, &qnode, client, 1);
+        if (readFileRes == -1)
+        {
+            queueDestroy(*toRet);
+            return -1;
+        }
         if (readFileRes == 1)
         {
             n++;       // O_LOCK || !OPENED => File not read
-            errno = 0; // reset errno to stay in the loop
+            errno = 0; // reset errno
         }
         else
-            queueEnqueue(*toRet, qnode);
+            ec_neg1(queueEnqueue(*toRet, qnode), free(qnode); queueDestroy(*toRet); return -1);
         nread++;
     }
-    ec_nz_f(UNLOCKSTORE);
-    eo(return -1); //internal error occurred during readFile||queueEnqueue||UNLOCKSTORE
+    ec_nz(UNLOCKSTORE, queueDestroy(*toRet); return -1);
     return (*toRet)->size;
 }
 
@@ -1106,7 +1110,6 @@ int storeDestroy()
     queueDestroy(store.files);
     return 0;
 }
-
 
 // UTILITIES
 // Compare functions

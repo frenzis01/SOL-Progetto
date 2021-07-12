@@ -164,19 +164,18 @@ _Bool NoMoreClients()
     return 1;
 }
 
-void printRequest(Request *req, int fd)
+char *reqToString(Request *req, int fd)
 {
-    printf("REQ %d: %d %d %d %d %hd %hd %ld %s %s %s\n",
+    size_t len = REQstr_LEN;
+    char *toRet = NULL;
+    ec_z(toRet = calloc(len,sizeof(char)), return NULL);
+    ec_neg(snprintf(toRet, len, "REQ %d: %d %d %d %ld %s %s",
            fd,
            req->op,
-           req->o_creat,
-           req->o_lock,
+           req->o_creat + req->o_lock,
            req->nfiles,
-           req->pathLen,
-           req->dirnameLen,
            req->appendLen,
            req->path,
-           req->dirname,
-           req->append);
-    return;
+           req->dirnameLen ? req->dirname : "<NULL>"),free(toRet); return NULL);
+    return toRet;
 }

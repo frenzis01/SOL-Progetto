@@ -12,30 +12,30 @@
         return -1;                                             \
     }
 
-#define ec_n_EOF(s, r, c)                                   \
-    do                                                      \
-    {                                                       \
-        if ((s) != (r))                                     \
-        {                                                   \
-            if (errno == ECONNRESET || errno == ENOTCONN)   \
+#define ec_n_EOF(s, r, c)                                     \
+    do                                                        \
+    {                                                         \
+        if ((s) != (r))                                       \
+        {                                                     \
+            if (errno == ECONNRESET || errno == ENOTCONN)     \
                 puts("\tServer went down. Disconnecting..."); \
-            else                                            \
-                perror(#s);                                 \
-            c;                                              \
-        }                                                   \
+            else                                              \
+                perror(#s);                                   \
+            c;                                                \
+        }                                                     \
     } while (0);
 
-#define ec_n_PIPE(s, r, c)                                   \
-    do                                                      \
-    {                                                       \
-        if ((s) != (r))                                     \
-        {                                                   \
-            if (errno == EPIPE)   \
+#define ec_n_PIPE(s, r, c)                                    \
+    do                                                        \
+    {                                                         \
+        if ((s) != (r))                                       \
+        {                                                     \
+            if (errno == EPIPE)                               \
                 puts("\tServer went down. Disconnecting..."); \
-            else                                            \
-                perror(#s);                                 \
-            c;                                              \
-        }                                                   \
+            else                                              \
+                perror(#s);                                   \
+            c;                                                \
+        }                                                     \
     } while (0);
 
 char skname[PATH_MAX] = ""; // active connection
@@ -137,11 +137,11 @@ int openFile(const char *pathname, int flags)
         p(ec_neg1(printEvictedPath(fptr), freeEvicted(fptr); return -1););
         if (dirEvicted)
         {
-            storeFileInDir(fptr, dirEvicted);
-            p(printf("File stored in %s\n", dirEvicted));
+            ec_neg1(storeFileInDir(fptr, dirEvicted), freeEvicted(fptr); return -1);
+            p(printf("\tFile stored in %s\n", dirEvicted));
         }
         freeEvicted(fptr);
-        p(printf("File trashed\n"));
+        p(printf("\tFile trashed\n"));
     }
     errno = res ? res : errno;
     return res ? -1 : 0;
@@ -183,11 +183,11 @@ int readFile(const char *pathname, void **buf, size_t *size)
         p(ec_neg1(printEvictedPath(fptr), freeEvicted(fptr); return -1));
 
         // copy evicted's content in buf
-        ec_z(*buf = malloc(sizeof(char) * fptr->size), freeEvicted(fptr); return -1);
-        memcpy(*buf, fptr->content, fptr->size);
         *size = fptr->size;
+        *buf = fptr->content;
 
-        freeEvicted(fptr);
+        free(fptr->path);
+        free(fptr);
     }
     errno = res ? res : errno;
     return res ? -1 : 0;
@@ -228,11 +228,11 @@ int readNFiles(int N, const char *dirname)
         ec_z(fptr, return -1);
         p(ec_neg1(printEvictedPath(fptr), freeEvicted(fptr); return -1));
 
-        storeFileInDir(fptr, dirname);
-        p(printf("File stored in %s\n", dirname));
+        ec_neg1(storeFileInDir(fptr, dirname), freeEvicted(fptr); return -1);
 
         freeEvicted(fptr);
     }
+    p(printf("\tFiles stored in %s\n", dirname));
     return i_nread;
 }
 
@@ -284,7 +284,7 @@ int writeFile(const char *pathname, const char *dirname)
         p(ec_neg1(printEvictedPath(fptr), freeEvicted(fptr); return -1));
         if (dirname)
         {
-            storeFileInDir(fptr, dirname);
+            ec_neg1(storeFileInDir(fptr, dirname), freeEvicted(fptr); return -1);
             p(printf("File stored in %s\n", dirname));
         }
         freeEvicted(fptr);
@@ -335,7 +335,7 @@ int appendToFile(const char *pathname, void *buf, size_t size, const char *dirna
         p(ec_neg1(printEvictedPath(fptr), freeEvicted(fptr); return -1));
         if (dirname)
         {
-            storeFileInDir(fptr, dirname);
+            ec_neg1(storeFileInDir(fptr, dirname), freeEvicted(fptr); return -1);
             p(printf("File stored in %s\n", dirname));
         }
         freeEvicted(fptr);
@@ -481,7 +481,7 @@ int removeFile(const char *pathname)
         p(ec_neg1(printEvictedPath(fptr), freeEvicted(fptr); return -1););
         if (dirEvicted)
         {
-            storeFileInDir(fptr, dirEvicted);
+            ec_neg1(storeFileInDir(fptr, dirEvicted), freeEvicted(fptr); return -1);
             p(printf("File stored in %s\n", dirEvicted));
         }
         freeEvicted(fptr);
@@ -545,7 +545,7 @@ evictedFile *readEvicted()
     ec_z(f->path = calloc(pathLen + 1, sizeof(char)), freeEvicted(f); return NULL);
     ec_n_EOF(readn(skfd, f->path, pathLen), pathLen, freeEvicted(f); return NULL);
     ec_n_EOF(readn(skfd, &f->size, sizeof(size_t)), sizeof(size_t), freeEvicted(f); return NULL);
-    ec_z(f->content = calloc(f->size, sizeof(char)), freeEvicted(f); return NULL);
+    ec_z(f->content = malloc(f->size * sizeof(char)), freeEvicted(f); return NULL);
     ec_n_EOF(readn(skfd, f->content, f->size), f->size, freeEvicted(f); return NULL);
     return f;
 }

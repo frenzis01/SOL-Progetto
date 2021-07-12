@@ -2,6 +2,7 @@
 #TEST3 (aka stress test)
 BWHT="\033[1;37m"
 REG="\x1b[0m"
+TIMER=30
 export BWHT
 
 echo "
@@ -16,7 +17,7 @@ export S_PID=$!
 echo -e $BWHT "
 
     STARTING TEST3
-    10 Clients are running simultaneously without '-p' option $REG
+    10 Clients will run simultaneously without '-p' option for ${TIMER}s $REG
 
     Errors, if any, will be printed
 
@@ -28,7 +29,7 @@ for i in {1..10}; do
     test/spawnclients.sh &
 done
 
-sleep 2
+sleep ${TIMER}
 
 echo -e "
     KILLING SERVER and CLIENTS

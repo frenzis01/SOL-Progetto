@@ -24,9 +24,9 @@ typedef struct {
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 Logger *logger = NULL; // singleton
 
-void LoggerCreate (char *path);
-void LoggerDelete (); // Frees memory, but doesn't unlink file
-void LoggerLog (char *buf, size_t len); // Sets errno on error
-void LoggerFlush ();    // Sets errno on error
+int LoggerCreate (char *path);
+int LoggerDelete (); // Frees memory, but doesn't unlink file
+int LoggerLog (char *buf, size_t len); // Sets errno on error
+int LoggerFlush ();    // Sets errno on error
 
 #endif

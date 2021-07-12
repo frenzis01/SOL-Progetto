@@ -12,32 +12,10 @@
 		perror(#s);   \
 	}
 
-#define eo(s, c)      \
-	if (errno == (s)) \
-	{                 \
-		c;            \
-		perror(#s);   \
-	}
-
-#define eq_zOLD(s, x, c) \
-	if (!(s))            \
-	{                    \
-		*E_QUEUE = x;    \
-		c;               \
-		perror(#s);      \
-	}
-
-// int *E_QUEUE = 0;
-#define E_QUEUE_MALLOC 1
-#define E_QUEUE_INVARG 2
-
-// allocSize inutile...
 queue *queueCreate(void (*freeValue)(void *), int (*compare)(void *, void *))
 {
-	errno = 0;
 	queue *q = malloc(sizeof(queue));
-	eo(ENOMEM, return NULL);
-	// q->allocationSize = allocSize;
+	eq_z(q, errno, return NULL);
 	q->size = 0;
 	q->head = q->tail = NULL;
 
@@ -51,20 +29,14 @@ queue *queueCreate(void (*freeValue)(void *), int (*compare)(void *, void *))
  */
 int queueEnqueue(queue *q, void *_data)
 {
-	errno = 0;
 	eq_z(q, EINVAL, return -1;);
 
 	data *toInsert = malloc(sizeof(data));
 	eq_z(toInsert, errno, return -1);
 
-	// Invece di copiare il contenuto di data, assegnamo il void*
-	// 	toInsert->data = malloc(q->allocationSize);
-	// 	eq_z(toInsert->data, E_QUEUE_MALLOC, { return NULL; });
-
 	toInsert->next = NULL;
 	toInsert->prev = NULL;
 	toInsert->data = _data;
-	// 	memcpy(toInsert->data, _data, q->allocationSize);
 	if (q->size == 0)
 	{ //First insertion
 		q->head = q->tail = toInsert;
@@ -82,7 +54,6 @@ int queueEnqueue(queue *q, void *_data)
 
 void *queueDequeue(queue *q)
 {
-	errno = 0;
 	eq_z(q, EINVAL, return NULL;);
 
 	if (!(q->head))
@@ -93,9 +64,6 @@ void *queueDequeue(queue *q)
 
 	if (q->size == 1)
 	{
-		// memcpy(toRet, toDel->data, q->allocationSize);
-		// q->freeValue(toDel->data);
-		// // free(toDel->data)
 		free(toDel);
 		q->head = q->tail = NULL;
 		q->size--;
@@ -103,8 +71,6 @@ void *queueDequeue(queue *q)
 	}
 	q->head->next->prev = NULL;
 	q->head = q->head->next;
-	// memcpy(toRet, toDel->data, q->allocationSize);
-	// free(toDel->data);
 	free(toDel);
 	q->size--;
 	return toRet;
@@ -112,25 +78,21 @@ void *queueDequeue(queue *q)
 
 void *queuePeek(queue *q)
 {
-	errno = 0;
 	eq_z(q, EINVAL, return NULL;);
 
 	if (!q->head)
 		return NULL;
 	return q->head->data;
-	// memcpy(toRet, q->head->data, q->allocationSize);
 }
 
 void queueClear(queue *q)
 {
-	errno = 0;
 	eq_z(q, EINVAL, return;);
 
 	while (!queueIsEmpty(q))
 	{
 		data *temp = q->head;
 		q->head = q->head->next;
-		// free(temp->data);
 		q->freeValue(temp->data);
 		free(temp);
 		q->size--;
@@ -139,7 +101,6 @@ void queueClear(queue *q)
 
 size_t queueGetSize(queue *q)
 {
-	errno = 0;
 	eq_z(q, EINVAL, return 0;);
 
 	return q->size;
@@ -147,7 +108,6 @@ size_t queueGetSize(queue *q)
 
 _Bool queueIsEmpty(queue *q)
 {
-	errno = 0;
 	eq_z(q, EINVAL, return 1;);
 
 	if (q->size == 0)
@@ -162,7 +122,6 @@ _Bool queueIsEmpty(queue *q)
 
 void *queueFind(queue *q, void *toFind, int (*compare)(void *, void *))
 {
-	errno = 0;
 	eq_z(q, EINVAL, return NULL;);
 
 	int (*cmpfunc)(void *, void *) = q->compare;
@@ -171,7 +130,6 @@ void *queueFind(queue *q, void *toFind, int (*compare)(void *, void *))
 
 	data *curr = q->head;
 
-	// NB cmpfunc potrebbe sporcare errno
 	while (curr && !(cmpfunc(curr->data, toFind)))
 		curr = curr->next;
 
@@ -180,6 +138,9 @@ void *queueFind(queue *q, void *toFind, int (*compare)(void *, void *))
 	return NULL;
 }
 
+/**
+ * Removes a node from the queue and returns it
+ */
 void *queueRemove(queue *q, void *toRemove, int (*compare)(void *, void *))
 {
 	errno = 0;
@@ -189,17 +150,15 @@ void *queueRemove(queue *q, void *toRemove, int (*compare)(void *, void *))
 	if (compare)
 		cmpfunc = compare;
 
-	// NB cmpfunc potrebbe sporcare errno
 	data *curr = q->head;
 	while (curr && !(cmpfunc(curr->data, toRemove)))
 		curr = curr->next;
 
 	if (!curr)
-		return NULL; // se non c'è nella lista, fine
-	// altrimenti aggiustiamo i pointer a prec e next
+		return NULL;
 
 	if (!curr->prev)
-	{ // curr testa
+	{ // curr = head
 		q->head = curr->next;
 	}
 	else
@@ -207,7 +166,7 @@ void *queueRemove(queue *q, void *toRemove, int (*compare)(void *, void *))
 		curr->prev->next = curr->next;
 	}
 	if (!curr->next)
-	{ // curr coda
+	{ // curr = tail
 		q->tail = curr->prev;
 	}
 	else
@@ -216,7 +175,6 @@ void *queueRemove(queue *q, void *toRemove, int (*compare)(void *, void *))
 	}
 
 	void *toRet = curr->data;
-	//q->freeValue(curr);
 	free(curr);
 	curr = NULL;
 	q->size--;
@@ -278,7 +236,6 @@ void *queueRemove_node(queue *q, data *toRemove)
 
 void queueDestroy(queue *q)
 {
-	errno = 0;
 	eq_z(q, EINVAL, return;);
 
 	queueClear(q);

@@ -39,7 +39,7 @@ echo -e $BWHT '
 bin/client -t 200 -p -f sock -w mock/1 -w mock/2 -R -d test/read
 echo -e $BWHT "
     Let's have a look at read files..."
-ls test/read/home/francis/Documenti/SOL/server/mock/1 test/read/home/francis/Documenti/SOL/server/mock/2
+ls test/read$PWD/mock/1 test/read$PWD/mock/2
 eval "$WHT_LINE"
 
 echo -e $BWHT '

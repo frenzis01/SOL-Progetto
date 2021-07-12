@@ -52,14 +52,6 @@ int manageExit(int fd);
 
 // Useful macros and constants
 #pragma region
-#define eo_af(c, f)                         \
-    c;                                      \
-    if (errno)                              \
-    {                                       \
-        perror(BRED "Server Internal" REG); \
-        f;                                  \
-    }
-
 #define p(c)           \
     if (printsEnabled) \
     {                  \
@@ -102,17 +94,17 @@ int manageExit(int fd);
         strerror_r(errno, errnoBuf, 200);                                                            \
         snprintf(toLog, REQstr_LEN + ERRNOBUF_LEN, "%ld__%s__%d__%s", myTid, reqStr, res, errnoBuf); \
         p(puts(toLog));                                                                              \
-        eo_af(LoggerLog(toLog, strlen(toLog)), c);                                                   \
+        ec_neg1(LoggerLog(toLog, strlen(toLog)), c);                                                   \
     } while (0);
 
 #define logEvicted(evict, f, c)                                                                                                                                            \
     ec_neg(snprintf(toLog, REQstr_LEN + ERRNOBUF_LEN, "%ld__%d__%s to %d: %s__%ld", myTid, req->op, evict ? "Evicting" : "Sending", fd, f->path, f->size), WK_DIE_ON_ERR); \
     p(puts(toLog));                                                                                                                                                        \
-    eo_af(LoggerLog(toLog, strlen(toLog)), c);
+    ec_neg1(LoggerLog(toLog, strlen(toLog)), c);
 
 #define PUSH_REQUEST(x, err_handle)                   \
     ec_nz(pthread_mutex_lock(&lockReq), err_handle);  \
-    eo_af(queueEnqueue(requests, x), err_handle);     \
+    ec_neg1(queueEnqueue(requests, x), err_handle);     \
     ec_nz(pthread_cond_signal(&condReq), err_handle); \
     ec_nz(pthread_mutex_unlock(&lockReq), err_handle);
 
@@ -198,8 +190,8 @@ int main(int argc, char **argv)
     sockName = meta.sockname;                                            // declared in conn.h
 
     // Init Logger
-    eo_af(LoggerCreate(LOG_PATH), storeDestroy(); exit(EXIT_FAILURE););
-    eo_af(LoggerLog(STARTUP_MSG, strlen(STARTUP_MSG)), storeDestroy(); exit(EXIT_FAILURE););
+    ec_neg1(LoggerCreate(LOG_PATH), storeDestroy(); exit(EXIT_FAILURE););
+    ec_neg1(LoggerLog(STARTUP_MSG, strlen(STARTUP_MSG)), storeDestroy(); exit(EXIT_FAILURE););
 
     // Spawning threads
     pthread_t workers[poolSize], dispThread;
@@ -244,7 +236,7 @@ int main(int argc, char **argv)
     storeDestroy();
     queueDestroy(requests);
 
-    eo_af(LoggerLog(CLEANEXIT_MSG, strlen(STARTUP_MSG)), storeDestroy(); exit(EXIT_FAILURE););
+    ec_neg1(LoggerLog(CLEANEXIT_MSG, strlen(STARTUP_MSG)), storeDestroy(); exit(EXIT_FAILURE););
     LoggerDelete();
 
     return 0; // unlink is in 'atexit'
@@ -325,7 +317,7 @@ void *dispatcher(void *arg)
                         ec_z(tmp, DS_DIE_ON_ERR);
                         p(printf(BYEL "Dispatcher - New connection accepted : %d - %ld\n" REG, tmp->fd, currNClient));
                         ec_neg(snprintf(toLog, LOGBUF_LEN, "CLIENT ADDED: %d - %ld", fd_c, currNClient), DS_DIE_ON_ERR;);
-                        eo_af(LoggerLog(toLog, strlen(toLog)), DS_DIE_ON_ERR);
+                        ec_neg1(LoggerLog(toLog, strlen(toLog)), DS_DIE_ON_ERR);
                         FD_SET(fd_c, &set); // listen to new fd
                         if (fd_c > fd_hwm)
                             fd_hwm = fd_c;
@@ -343,7 +335,7 @@ void *dispatcher(void *arg)
                         p(printf(BYEL "Dispatcher - Removing client %d - %ld\n" REG, fdFromWorker, currNClient));
                         ec_nz(close(fdFromWorker), DS_DIE_ON_ERR);
                         ec_neg1(snprintf(toLog, LOGBUF_LEN, "CLIENT LEFT: %d - %ld", fdFromWorker, currNClient), DS_DIE_ON_ERR);
-                        eo_af(LoggerLog(toLog, strlen(toLog)), DS_DIE_ON_ERR);
+                        ec_neg1(LoggerLog(toLog, strlen(toLog)), DS_DIE_ON_ERR);
 
                         if (NoMoreClients() && myShutdown == HUP_QUIT) // soft exiting
                         {
@@ -472,7 +464,7 @@ void *worker(void *args)
 
         while (queueIsEmpty(requests))
             ec_nz(pthread_cond_wait(&condReq, &lockReq), {}); // wait for requests
-        eo_af(requestor = queueDequeue(requests), WK_DIE_ON_ERR);
+        requestor = queueDequeue(requests);
         ec_nz(pthread_mutex_unlock(&lockReq), {});
 
         if (!requestor) // TERMINATION REQUEST SENT BY main()

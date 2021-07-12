@@ -1,5 +1,0 @@
-capacity=2000
-workers=5
-sockname=sock
-nfiles=100
-evictPolicy=1

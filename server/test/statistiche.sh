@@ -11,6 +11,8 @@ do
   succ=$(grep -o ".*__REQ .*: ${op}.*__Success" log.txt | wc -l)
   echo "Successful $op requests: $succ"
 done
+succ=$(grep -o ".*__REQ .*: [(open 2|open 3)].*__Success" log.txt | wc -l)
+  echo "Successful open-lock requests: $succ"
 
 # Average write size
 writeSum=$(grep -o ".*__REQ .*: [(append|write)].*__Success" log.txt | cut -d' ' -f 10 | paste -sd+ | bc)

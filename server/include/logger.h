@@ -13,7 +13,7 @@
 #include <stdlib.h>
 
 // when size is reached we will write on the actual log file
-#define MAX_LOG_SIZE 16384
+#define MAX_LOG_SIZE 32768
 
 typedef struct {
     char *buf;

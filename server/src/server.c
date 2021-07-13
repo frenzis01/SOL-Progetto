@@ -102,7 +102,7 @@ int statsToLog(size_t maxNclients);
     } while (0);
 
 #define logEvicted(evict, f, c)                                                                                                                                            \
-    ec_neg(snprintf(toLog, REQstr_LEN + ERRNOBUF_LEN, "%ld__%d__%s to %d: %s__%ld", myTid, req->op, evict ? "Evicting" : "Sending", fd, f->path, f->size), WK_DIE_ON_ERR); \
+    ec_neg(snprintf(toLog, REQstr_LEN + ERRNOBUF_LEN, "%ld__%d__%s to %d: %ld %s", myTid, req->op, evict ? "Evicting" : "Sending", fd, f->size, f->path), WK_DIE_ON_ERR); \
     p(puts(toLog));                                                                                                                                                        \
     ec_neg1(LoggerLog(toLog, strlen(toLog)), c);
 

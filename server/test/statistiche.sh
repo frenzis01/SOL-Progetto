@@ -1,6 +1,12 @@
 BWHT="\033[1;37m"
 REG="\033[0m"
 
+if [ ! -f log.txt ]; then
+    echo "log.txt not found!"
+    exit 0
+fi
+
+
 echo "$BWHT 
   SERVER STATS
 "
@@ -22,7 +28,7 @@ echo "
 Average write size: " $((writeSum / nWrite)) "MB"
 
 # Average read size
-readSum=$(grep -o ".*Sending to.*" log.txt | cut -d'_' -f 7 | paste -sd+ | bc)
+readSum=$(grep -o ".*Sending to.*" log.txt | cut -d':' -f 2 | paste -sd+ | bc)
 nRead=$(grep -o ".*Sending to.*" log.txt | wc -l)
 
 echo "Average read size: " $((readSum / nRead)) "MB"

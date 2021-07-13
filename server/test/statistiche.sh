@@ -33,6 +33,15 @@ nRead=$(grep -o ".*Sending to.*" log.txt | wc -l)
 
 echo "Average read size: " $((readSum / nRead)) "MB"
 
+# Requests per Worker
+echo "Requests served by every worker:"
+i=0
+while [ "$i" -le "$1" ]
+do
+  echo $i ": " $(grep -o ".*-${i}.*" log.txt | wc -l) 
+  i=$(($i + 1))
+done
+
 # Some other stats
 statsLine=$(grep -o ".*-STATS:.*" log.txt)
 maxNfiles=$(echo $statsLine | cut -d' ' -f 6)

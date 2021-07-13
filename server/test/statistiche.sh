@@ -36,7 +36,7 @@ echo "Average read size: " $((readSum / nRead)) "MB"
 # Requests per Worker
 echo "Requests served by every worker:"
 i=0
-while [ "$i" -le "$1" ]
+while [ "$i" -lt "$1" ]
 do
   echo $i ": " $(grep -o ".*-${i}.*" log.txt | wc -l) 
   i=$(($i + 1))

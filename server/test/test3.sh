@@ -6,12 +6,12 @@ TIMER=30
 export BWHT
 
 echo "
-    ...Removing log.txt and read/evicted folders...
+    ...Removing log.txt and cleaning read/evicted folders...
 "
 rm -r -f test/read/* test/evicted/* log.txt
 
 #run server in background
-bin/server test/conf/2_1.txt &
+bin/server test/conf/3.txt &
 export S_PID=$!
 
 echo -e $BWHT "
@@ -20,6 +20,9 @@ echo -e $BWHT "
     10 Clients will run simultaneously without '-p' option for ${TIMER}s $REG
 
     Errors, if any, will be printed
+
+    
+    Clients who notice that the server is down, will write a message on stdout
 
 "
 
@@ -32,12 +35,11 @@ done
 sleep ${TIMER}
 
 echo -e "
-    KILLING SERVER and CLIENTS
+    KILLING SERVER and SPAWNCLIENTS
 "
+killall -9 spawnclients.sh > /dev/null 2>/dev/null
 kill -2 $S_PID
-killall -9 spawnclients.sh
 
-# wait $C_PID
 echo -e $BWHT '
 
     ...Clients who are waiting for openConnection() to fail will die in 10s...

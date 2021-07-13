@@ -34,7 +34,7 @@
         {                                                               \
             if (errno == ETIME)                                         \
                 perror("Connection to the server failed");                            \
-            else if (errno && errno != ENOTCONN && errno != ECONNRESET) \
+            else if (errno && errno != ENOTCONN && errno != ECONNRESET && errno != EPIPE) \
                 perror(#s);                                             \
             c;                                                          \
         }                                                               \

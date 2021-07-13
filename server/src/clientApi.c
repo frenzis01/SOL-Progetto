@@ -110,7 +110,7 @@ int openFile(const char *pathname, int flags)
         return -1;
     }
     char *path = NULL;
-    ec_z(path = getAbsolutePath(pathname), return -1);
+    ec_z(path = getAbsolutePath(pathname), errno = EINVAL; return -1);
     p(printf("openFile__%s__%d: ", path, flags));
     // SEND REQUEST
     unsigned short pathLen = strnlen(path, PATH_MAX);
@@ -160,7 +160,7 @@ int readFile(const char *pathname, void **buf, size_t *size)
         return -1;
     }
     char *path = NULL;
-    ec_z(path = getAbsolutePath(pathname), return -1);
+    ec_z(path = getAbsolutePath(pathname), errno = EINVAL; return -1);
     p(printf("readFile__%s: ", path));
     // SEND REQUEST
     unsigned short pathLen = strnlen(path, PATH_MAX);
@@ -249,7 +249,7 @@ int writeFile(const char *pathname, const char *dirname)
         return -1;
     }
     char *path = NULL;
-    ec_z(path = getAbsolutePath(pathname), return -1);
+    ec_z(path = getAbsolutePath(pathname), errno = EINVAL; return -1);
     p(printf("writeFile__%s__%s: ", path, dirname));
 
     // READ FROM DISK
@@ -308,7 +308,7 @@ int appendToFile(const char *pathname, void *buf, size_t size, const char *dirna
         return -1;
     }
     char *path = NULL;
-    ec_z(path = getAbsolutePath(pathname), return -1);
+    ec_z(path = getAbsolutePath(pathname), errno = EINVAL; return -1);
     p(printf("appendToFile__%s__%ld__%s: ", path, size, dirname));
     // SEND REQUEST
     unsigned short pathLen = strnlen(path, PATH_MAX);
@@ -357,7 +357,7 @@ int lockFile(const char *pathname)
         return -1;
     }
     char *path = NULL;
-    ec_z(path = getAbsolutePath(pathname), return -1);
+    ec_z(path = getAbsolutePath(pathname), errno = EINVAL; return -1);
     p(printf("lockFile__%s: ", path));
     // SEND REQUEST
     unsigned short pathLen = strnlen(path, PATH_MAX);
@@ -391,7 +391,7 @@ int unlockFile(const char *pathname)
         return -1;
     }
     char *path = NULL;
-    ec_z(path = getAbsolutePath(pathname), return -1);
+    ec_z(path = getAbsolutePath(pathname), errno = EINVAL; return -1);
     p(printf("unlockFile__%s: ", path));
     // SEND REQUEST
     unsigned short pathLen = strnlen(path, PATH_MAX);
@@ -424,7 +424,7 @@ int closeFile(const char *pathname)
         return -1;
     }
     char *path = NULL;
-    ec_z(path = getAbsolutePath(pathname), return -1);
+    ec_z(path = getAbsolutePath(pathname), errno = EINVAL; return -1);
     p(printf("closeFile__%s: ", path));
     // SEND REQUEST
     unsigned short pathLen = strnlen(path, PATH_MAX);
@@ -457,7 +457,7 @@ int removeFile(const char *pathname)
         return -1;
     }
     char *path = NULL;
-    ec_z(path = getAbsolutePath(pathname), return -1);
+    ec_z(path = getAbsolutePath(pathname), errno = EINVAL; return -1);
     p(printf("removeFile__%s: ", path));
     // SEND REQUEST
     unsigned short pathLen = strnlen(path, PATH_MAX);

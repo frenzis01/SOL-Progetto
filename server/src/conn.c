@@ -7,18 +7,16 @@ void setFlags(Request *req, int flags);
 #define SZST sizeof(size_t)
 
 // Useful for readn
-#define ec_n_EOF(s, r, c)          \
-    do                             \
-    {                              \
-        if ((s) != (r))            \
-        {                          \
-            if (errno != ENOTCONN) \
-                perror(#s);        \
-            c;                     \
-        }                          \
+#define ec_n_EOF(s, r, c)                                 \
+    do                                                    \
+    {                                                     \
+        if ((s) != (r))                                   \
+        {                                                 \
+            if (errno != ENOTCONN && errno != ECONNRESET) \
+                perror(#s);                               \
+            c;                                            \
+        }                                                 \
     } while (0);
-
-
 
 /**
  * Reads a request from an fd.
@@ -168,14 +166,16 @@ char *reqToString(Request *req, int fd)
 {
     size_t len = REQstr_LEN;
     char *toRet = NULL;
-    ec_z(toRet = calloc(len,sizeof(char)), return NULL);
-    ec_neg(snprintf(toRet, len, "REQ %d: %d %d %d %ld %s %s",
-           fd,
-           req->op,
-           req->o_creat + req->o_lock,
-           req->nfiles,
-           req->appendLen,
-           req->path,
-           req->dirnameLen ? req->dirname : "<NULL>"),free(toRet); return NULL);
+    ec_z(toRet = calloc(len, sizeof(char)), return NULL);
+    ec_neg(snprintf(toRet, len, "REQ %d: %s %d %d %ld %s %s",
+                    fd,
+                    opToStr(req->op),
+                    req->o_creat + req->o_lock,
+                    req->nfiles,
+                    req->appendLen,
+                    req->path,
+                    req->dirnameLen ? req->dirname : "<NULL>"),
+           free(toRet);
+           return NULL);
     return toRet;
 }

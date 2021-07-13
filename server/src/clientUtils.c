@@ -1,43 +1,7 @@
 #include <clientUtils.h>
 #include <time.h>
 
-int printString(const char *str, size_t len)
-{
-    for (size_t i = 0; i < len; i++)
-        ec_neg(printf("%c", str[i]), return -1);
 
-    return 0;
-}
-int printEvictedPath(void *arg)
-{
-    evictedFile *c = arg;
-    ec_neg(printf(BMAG "EVCTD -- PATH: %s | CONTENT SIZE: %ld\n" REG, c->path, c->size), return -1);
-    return 0;
-}
-
-/**
- * Useful exclusively for text-only files
- */
-int printEvicted(void *arg)
-{
-    evictedFile *c = arg;
-    ec_neg(printf(BMAG "EVCTD -- PATH: %s | CONTENT: " REG BMAG, c->path), return -1);
-    ec_neg(printString(c->content, c->size), return -1);
-    ec_neg(printf(REG "\n"), return -1);
-    errno = 0;
-    return 0;
-}
-void freeEvicted(void *arg)
-{
-    if (!arg)
-        return;
-    evictedFile *f = arg;
-    free(f->content);
-    free(f->path);
-    f->content = NULL;
-    f->path = NULL;
-    free(f);
-}
 
 /**
  * Assumes f->path is absolute. \n \n
@@ -107,6 +71,11 @@ store_cleanup:
     return -1;
 }
 
+/**
+ * If 'path' contains dots '.' and doesn't exist on disk, expansion fails and NULL
+ * is returned
+ * @returns absolute path on success, NULL on error
+ */
 char *getAbsolutePath(const char *path)
 {
     if (!path)
@@ -136,4 +105,42 @@ char *getAbsolutePath(const char *path)
     if (!toRet)
         free(absPath);
     return toRet;
+}
+
+int printString(const char *str, size_t len)
+{
+    for (size_t i = 0; i < len; i++)
+        ec_neg(printf("%c", str[i]), return -1);
+
+    return 0;
+}
+int printEvictedPath(void *arg)
+{
+    evictedFile *c = arg;
+    ec_neg(printf(BMAG "EVCTD -- PATH: %s | CONTENT SIZE: %ld\n" REG, c->path, c->size), return -1);
+    return 0;
+}
+
+/**
+ * Useful exclusively for text-only files
+ */
+int printEvicted(void *arg)
+{
+    evictedFile *c = arg;
+    ec_neg(printf(BMAG "EVCTD -- PATH: %s | CONTENT: " REG BMAG, c->path), return -1);
+    ec_neg(printString(c->content, c->size), return -1);
+    ec_neg(printf(REG "\n"), return -1);
+    errno = 0;
+    return 0;
+}
+void freeEvicted(void *arg)
+{
+    if (!arg)
+        return;
+    evictedFile *f = arg;
+    free(f->content);
+    free(f->path);
+    f->content = NULL;
+    f->path = NULL;
+    free(f);
 }

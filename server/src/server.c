@@ -44,11 +44,12 @@ void *worker(void *arg);
 int readConfig(char *configPath, ServerData *new);
 int parseRequest(char *str, Request *req);
 void *dispatcher(void *arg);
-int sendFileToClient(evictedFile *fptr, int fd);
+int sendFileToClient(evictedFile *fptr, int fd, _Bool *W_hasExited);
 int notifyPendingLockers(queue *lockers, int msg);
 void *signalHandler(void *args);
 int removeClient(int fd, queue **notifyLockers);
 int manageExit(int fd);
+int statsToLog(size_t maxNclients);
 
 // Useful macros and constants
 #pragma region
@@ -58,22 +59,25 @@ int manageExit(int fd);
         c;             \
     }
 
+#define UPDATE_MAX(m, a) a > m ? m = a : m;
+
 // used by workers
-#define ec_neg1_SKT(s, c)                              \
-    do                                                 \
-    {                                                  \
-        if ((s) == (-1))                               \
-        {                                              \
-            if (errno == ECONNRESET || errno == EBADF) \
-            {                                          \
-                ec_neg1(manageExit(fd), c);            \
-            }                                          \
-            else                                       \
-            {                                          \
-                perror(#s);                            \
-                c;                                     \
-            }                                          \
-        }                                              \
+#define ec_neg1_SKT(s, c)                                                \
+    do                                                                   \
+    {                                                                    \
+        if (!hasExited && (s) == (-1))                                   \
+        {                                                                \
+            if (errno == ECONNRESET || errno == EBADF || errno == EPIPE) \
+            {                                                            \
+                hasExited = 1;                                           \
+                ec_neg1(manageExit(fd), c);                              \
+            }                                                            \
+            else                                                         \
+            {                                                            \
+                perror(#s);                                              \
+                c;                                                       \
+            }                                                            \
+        }                                                                \
     } while (0);
 
 #define log(s, c)                                                                                    \
@@ -94,7 +98,7 @@ int manageExit(int fd);
         strerror_r(errno, errnoBuf, 200);                                                            \
         snprintf(toLog, REQstr_LEN + ERRNOBUF_LEN, "%ld__%s__%d__%s", myTid, reqStr, res, errnoBuf); \
         p(puts(toLog));                                                                              \
-        ec_neg1(LoggerLog(toLog, strlen(toLog)), c);                                                   \
+        ec_neg1(LoggerLog(toLog, strlen(toLog)), c);                                                 \
     } while (0);
 
 #define logEvicted(evict, f, c)                                                                                                                                            \
@@ -104,7 +108,7 @@ int manageExit(int fd);
 
 #define PUSH_REQUEST(x, err_handle)                   \
     ec_nz(pthread_mutex_lock(&lockReq), err_handle);  \
-    ec_neg1(queueEnqueue(requests, x), err_handle);     \
+    ec_neg1(queueEnqueue(requests, x), err_handle);   \
     ec_nz(pthread_cond_signal(&condReq), err_handle); \
     ec_nz(pthread_mutex_unlock(&lockReq), err_handle);
 
@@ -112,7 +116,7 @@ int manageExit(int fd);
 #define BUF 8192
 #define LOG_PATH "log.txt"
 #define STARTUP_MSG "SERVER STARTUP"
-#define CLEANEXIT_MSG "SERVER SHUTDOWN"
+#define CLEANEXIT_MSG "SERVER SHUTDOWN "
 #define H_BUCKETS 2048
 
 #define HARSH_QUIT 2
@@ -253,12 +257,14 @@ int main(int argc, char **argv)
         goto dispatcher_cleanup;                                        \
     } while (0)
 
+
 void *dispatcher(void *arg)
 {
     p(puts(BYEL "Dispatcher startup" REG));
 
     pthread_t sigHandlerRef = *((pthread_t *)arg);
     size_t currNClient = 0;
+    size_t maxNClient = 0;
 
     // fd_c == fd_client
     int fd_skt, fd_c, fd;
@@ -288,16 +294,11 @@ void *dispatcher(void *arg)
     int fd_hwm = max(3, fd_skt, MANAGER_READ, SIGNAL_READ);
 
     Client *requestor = NULL;
-    // struct timeval tv = {1,0};
 
     while (myShutdown != HARSH_QUIT)
     {
         read_set = set;
         ec_neg1(select(fd_hwm + 1, &read_set, NULL, NULL, NULL), DS_DIE_ON_ERR);
-        /* if (sel_ret == 0)
-        {
-            continue; // skippi alla prossima iterazione del ciclo
-        } */
         for (fd = 0; fd <= fd_hwm /*&& !sig_flag*/; fd++)
         {
             if (FD_ISSET(fd, &read_set))
@@ -313,6 +314,7 @@ void *dispatcher(void *arg)
                     else
                     {
                         currNClient++;
+                        UPDATE_MAX(maxNClient, currNClient);
                         Client *tmp = addClient(fd_c); // add new client to Clients' structure
                         ec_z(tmp, DS_DIE_ON_ERR);
                         p(printf(BYEL "Dispatcher - New connection accepted : %d - %ld\n" REG, tmp->fd, currNClient));
@@ -380,13 +382,16 @@ void *dispatcher(void *arg)
                     if (fd == fd_hwm)
                         fd_hwm--;
                     ec_neg1(snprintf(fdBuf, INT_LEN, "%06d", fd), DS_DIE_ON_ERR);
+                    ec_nz(LOCKCLIENTS, DS_DIE_ON_ERR);
                     ec_z(requestor = icl_hash_find(clients, fdBuf), DS_DIE_ON_ERR);
+                    ec_nz(UNLOCKCLIENTS, DS_DIE_ON_ERR);
                     PUSH_REQUEST(requestor, DS_DIE_ON_ERR);
                 }
             }
         }
     }
 dispatcher_cleanup:
+    statsToLog(maxNClient);
     return NULL;
 }
 
@@ -454,11 +459,13 @@ void *worker(void *args)
     queue
         *evictedList = NULL;
     size_t nEvicted = 0;
+    _Bool hasExited = 0;
 
     snprintf(deathMSG, 14 + sizeof(size_t), "WORKER DIED: %ld", myTid); // will be used in WK_DIE_ON_ERR
 
     while (myShutdown != HARSH_QUIT) // Slightly unnecessary, main() will send termination requests
     {
+        hasExited = 0;
         // GET A REQUEST
         ec_nz(pthread_mutex_lock(&lockReq), {});
 
@@ -480,7 +487,7 @@ void *worker(void *args)
         fd = requestor->fd;
         req = getRequest(fd);
 
-        if (!req && errno == ENOTCONN) // client closed the socket
+        if (!req && (errno == ENOTCONN || errno == ECONNRESET)) // client closed the socket
         {
             ec_neg1(manageExit(fd), WK_DIE_ON_ERR);
             continue;
@@ -533,8 +540,10 @@ void *worker(void *args)
             {
                 errnosave = 0;
                 ec_neg1_SKT(writen(res, &errnosave, sizeof(int)), WK_DIE_ON_ERR);
-                ec_neg1(writen(WORKER_WRITE, &res, sizeof(int)), WK_DIE_ON_ERR);
-                // put res(fd) back in select set
+                // put res(fd) back in select set if hasn't exited
+                if (!hasExited)
+                    ec_neg1(writen(WORKER_WRITE, &res, sizeof(int)), WK_DIE_ON_ERR);
+                hasExited = 0;
             }
             break;
 
@@ -577,8 +586,12 @@ void *worker(void *args)
             evictedFile *curr = queueDequeue(evictedList);
             while (curr)
             {
-                ec_neg1(sendFileToClient(curr, fd), WK_DIE_ON_ERR);
-                logEvicted(req->op != READN_FILES, curr, WK_DIE_ON_ERR);
+                if (!hasExited)
+                {
+                    ec_neg1(sendFileToClient(curr, fd, &hasExited), WK_DIE_ON_ERR);
+                    if (!hasExited)
+                        logEvicted(req->op != READN_FILES, curr, WK_DIE_ON_ERR);
+                }
                 if (req->op != READN_FILES) // if it is a victim
                 {
                     ec_neg1(notifyPendingLockers(curr->notifyLockers, ENOENT), WK_DIE_ON_ERR);
@@ -592,8 +605,12 @@ void *worker(void *args)
         if (evicted)
         {
             //Can be openVictim or readFile target or remove target
-            ec_neg1(sendFileToClient(evicted, fd), WK_DIE_ON_ERR);
-            logEvicted(req->op != READ_FILE, evicted, WK_DIE_ON_ERR);
+            if (!hasExited)
+            {
+                ec_neg1(sendFileToClient(evicted, fd, &hasExited), WK_DIE_ON_ERR);
+                if (!hasExited)
+                    logEvicted(req->op != READ_FILE, evicted, WK_DIE_ON_ERR);
+            }
             if (req->op != READ_FILE) // if it is a victim or remove target
             {
                 ec_neg1(notifyPendingLockers(evicted->notifyLockers, ENOENT), WK_DIE_ON_ERR);
@@ -606,7 +623,8 @@ void *worker(void *args)
         evictedList = NULL;
 
         // We need to put the ready fd back in the select's set
-        ec_neg1(writen(WORKER_WRITE, &fd, sizeof(int)), WK_DIE_ON_ERR);
+        if (!hasExited)
+            ec_neg1(writen(WORKER_WRITE, &fd, sizeof(int)), WK_DIE_ON_ERR);
         freeRequest(req);
         free(reqStr);
         reqStr = NULL;
@@ -627,10 +645,11 @@ worker_cleanup:
 /**
  * Sends and evicted file to a client. Doens't notify the (pending) lockers
  */
-int sendFileToClient(evictedFile *fptr, int fd)
+int sendFileToClient(evictedFile *fptr, int fd, _Bool *W_hasExited)
 {
     char *buf = NULL;
     int index = 0;
+    _Bool hasExited = *W_hasExited;
     size_t len = sizeof(size_t) + strnlen(fptr->path, PATH_MAX) + sizeof(size_t) + fptr->size;
     ec_z(buf = malloc(len * sizeof(char)), return -1);
     // We'll write {pathLen,path,size,content}
@@ -645,6 +664,7 @@ int sendFileToClient(evictedFile *fptr, int fd)
 
     // Write to the client
     ec_neg1_SKT(writen(fd, buf, len), free(buf); return -1;);
+    *W_hasExited = hasExited;
     free(buf);
     return 0; // success
 }
@@ -659,10 +679,15 @@ int notifyPendingLockers(queue *lockers, int msg)
 {
     errno = 0;
     Client *curr = queueDequeue(lockers);
+    int fd;
+    _Bool hasExited = 0;
     while (!errno && curr)
     {
-        ec_n(writen(curr->fd, &msg, sizeof(int)), sizeof(int), return -1;);
-        ec_n(writen(WORKER_WRITE, &(curr->fd), sizeof(int)), sizeof(int), return -1;);
+        hasExited = 0;
+        fd = curr->fd;
+        ec_neg1_SKT(writen(fd, &msg, sizeof(int)), return -1;);
+        if (!hasExited)
+            ec_n(writen(WORKER_WRITE, &(fd), sizeof(int)), sizeof(int), return -1;);
         curr = queueDequeue(lockers);
     }
     queueDestroy(lockers);
@@ -707,19 +732,19 @@ int removeClient(int fd, queue **notifyLockers)
     char fdBuf[INT_LEN];
     ec_neg1(snprintf(fdBuf, INT_LEN, "%06d", fd), return -1);
     // remove from storage
-    ec_nz(LOCKCLIENTS, return -1);
     Client *toRemove = icl_hash_find(clients, fdBuf);
     ec_z(toRemove, return -1);
     ec_z(*notifyLockers = storeRemoveClient(toRemove), return -1);
     ec_neg1(icl_hash_delete(clients, fdBuf, free, free), return -1);
-    ec_nz(UNLOCKCLIENTS, return -1);
     return 0;
 }
 
 int manageExit(int fd)
 {
     queue *notifyLockers = NULL;
-    ec_neg1(removeClient(fd, &notifyLockers), queueDestroy(notifyLockers); return -1);
+    ec_nz(LOCKCLIENTS, return -1);
+    ec_neg1(removeClient(fd, &notifyLockers), UNLOCKCLIENTS; return -1);
+    ec_nz(UNLOCKCLIENTS, return -1);
     // if there was at least one pending locker on a file O_LOCKed by
     // the removed client, we must notify it of the successful lockFile()
     ec_neg1(notifyPendingLockers(notifyLockers, SUCCESS), queueDestroy(notifyLockers); return -1);
@@ -728,7 +753,17 @@ int manageExit(int fd)
     // if there are no more clients and we are HUP-exiting,
     // dispatcher will manage exit (and log client's disconnection)
     fd *= -1;
-    ec_neg1(writen(WORKER_WRITE, &fd, sizeof(int)), queueDestroy(notifyLockers); return -1);
-    queueDestroy(notifyLockers);
+    ec_neg1(writen(WORKER_WRITE, &fd, sizeof(int)), return -1);
     return 0;
+}
+
+int statsToLog(size_t maxNclients)
+{
+    char toLog[500];
+    snprintf(toLog, 1000, "STATS: %ld %.2lf %ld %ld",
+             store.maxNfilesReached,
+             (double)store.maxSizeReached / (double)1000000,
+             store.nEviction,
+             maxNclients);
+    return LoggerLog(toLog, strnlen(toLog, 500));
 }

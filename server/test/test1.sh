@@ -8,7 +8,7 @@ $REG\""
 
 
 echo "
-    ...Removing log.txt and read/evicted folders...
+    ...Removing log.txt and cleaning read/evicted folders...
 "
 rm -r -f test/read/* test/evicted/* log.txt
 

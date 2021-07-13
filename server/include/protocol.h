@@ -19,8 +19,7 @@
  *  
  */
 
-// #define OPENCONN 1
-// #define CLOSECONN 2
+
 #pragma region
 #define OPEN_FILE 1
 #define READ_FILE 2
@@ -31,6 +30,17 @@
 #define UNLOCK_FILE 7
 #define CLOSE_FILE 8
 #define REMOVE_FILE 9
+
+#define opToStr(o) \
+o == 1 ? "open" :\
+o == 2 ? "read" :\
+o == 3 ? "readN" :\
+o == 4 ? "append" :\
+o == 5 ? "write" :\
+o == 6 ? "lock" :\
+o == 7 ? "unlock" :\
+o == 8 ? "close" :\
+o == 9 ? "remove" : ""
 #pragma endregion
 
 #define SUCCESS 0

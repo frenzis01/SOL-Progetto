@@ -4,7 +4,7 @@ BWHT="\033[1;37m"
 REG="\x1b[0m"
 
 echo "
-    ...Removing log.txt and read/evicted folders...
+    ...Removing log.txt and cleaning read/evicted folders...
 "
 rm -r -f test/read/* test/evicted/* log.txt
 

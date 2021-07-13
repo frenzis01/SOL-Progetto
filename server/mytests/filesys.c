@@ -191,16 +191,14 @@ int main(void)
     storeDestroy();
 
     freeArr((void **)paths, NFILES, NULL);
-    // freeArr((void**)contents,NFILES,NULL);
     freeArr((void **)clients, NCLIENTS, NULL);
-    // freeArr((void **)evicted, NFILES, freeEvicted);
 
 #endif
     return 0;
 }
 
 #define PATH_MSG "path"
-void initPaths(char **paths /*, char **contents*/)
+void initPaths(char **paths)
 {
     puts("InitFiles");
     for (size_t i = 0; i < NFILES; i++)
@@ -210,7 +208,6 @@ void initPaths(char **paths /*, char **contents*/)
         assert(paths[i] = calloc(strlen(PATH_MSG) + strlen(tmp) + 1, sizeof(char)));
         strcat(paths[i], PATH_MSG);
         strcat(paths[i], tmp);
-        // (paths[i])[strlen(PATH_MSG) + strlen(tmp)] = '\0';
         printf("P%ld:%s \n", i, paths[i]);
     }
 }
@@ -220,7 +217,6 @@ void initEvicted(evictedFile **evicted)
     puts("InitEvicted");
     for (size_t i = 0; i < NFILES; i++)
     {
-        // assert(evicted[i] = malloc(sizeof(evictedFile)));
         evicted[i] = NULL;
     }
 }
@@ -243,11 +239,3 @@ void freeArr(void **arr, size_t n, void (*myfree)(void *arg))
             myfree ? myfree(arr[i]) : free(arr[i]);
     }
 }
-
-// void initRead(char **contents) {
-//     puts("InitRead");
-//     for (size_t i = 0; i < NFILES; i++)
-//     {
-//         assert(contents[i] = malloc(sizeof(evictedFile)));
-//     }
-// }

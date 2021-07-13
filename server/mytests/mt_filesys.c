@@ -19,8 +19,6 @@
 #include <stdlib.h>
 #include <time.h>
 
-#define BCYN "\x1b[36m"
-#define REG "\x1b[0m"
 #define MSG_PERROR(s) perror(BCYN s REG);
 #define ONLY_MSG_ERR BCYN "INTERNAL" REG
 

@@ -101,9 +101,9 @@ int statsToLog(size_t maxNclients);
         ec_neg1(LoggerLog(toLog, strlen(toLog)), c);                                                 \
     } while (0);
 
-#define logEvicted(evict, f, c)                                                                                                                                            \
+#define logEvicted(evict, f, c)                                                                                                                                           \
     ec_neg(snprintf(toLog, REQstr_LEN + ERRNOBUF_LEN, "%ld__%d__%s to %d: %ld %s", myTid, req->op, evict ? "Evicting" : "Sending", fd, f->size, f->path), WK_DIE_ON_ERR); \
-    p(puts(toLog));                                                                                                                                                        \
+    p(puts(toLog));                                                                                                                                                       \
     ec_neg1(LoggerLog(toLog, strlen(toLog)), c);
 
 #define PUSH_REQUEST(x, err_handle)                   \
@@ -201,12 +201,12 @@ int main(int argc, char **argv)
     pthread_t workers[poolSize], dispThread;
 
     // Workers
-    workerArgs args[1];
-    args->sigHandler = &sigHandThread;
+    workerArgs args[poolSize];
     for (size_t i = 0; i < poolSize; i++) // workers init
     {
-        args->tid = i;
-        ec_neg1(pthread_create(&workers[i], NULL, worker, (void *)(args)), exit(EXIT_FAILURE));
+        args[i].tid = i;
+        args[i].sigHandler = &sigHandThread;
+        ec_neg1(pthread_create(&workers[i], NULL, worker, (void *)(args + i)), exit(EXIT_FAILURE));
     }
 
     // Dispatcher/Manager
@@ -256,7 +256,6 @@ int main(int argc, char **argv)
         ec_nz(pthread_kill(sigHandlerRef, SIGINT), exit(EXIT_FAILURE)); \
         goto dispatcher_cleanup;                                        \
     } while (0)
-
 
 void *dispatcher(void *arg)
 {
@@ -442,10 +441,10 @@ void *signalHandler(void *args)
  */
 void *worker(void *args)
 {
-    p(puts(BGRN "Worker startup" REG));
 
     size_t myTid = ((workerArgs *)args)->tid;
     pthread_t sigHandlerRef = *(((workerArgs *)args)->sigHandler);
+    p(printf(BGRN "Worker %ld startup\n" REG, myTid));
 
     Client *requestor = NULL;
     int fd, res = 0, errnosave = 0;

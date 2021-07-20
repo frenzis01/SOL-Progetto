@@ -54,7 +54,7 @@ rm -r test/evicted/*    # clean evicted dir
 bin/server test/conf/2_2.txt &  # FIFO config file
 S_PID=$!
 
-bin/client -p -t 50 -f sock -W mock/3/3.rtf,./../server/./mock/3/9.rtf,mock/3/10.rtf,mock/3/1.doc,mock/3/2.doc
+bin/client -p -t 50 -f sock -W mock/3/3.rtf,mock/3/9.rtf,mock/3/10.rtf,mock/3/1.doc,mock/3/2.doc
 kill -10 $S_PID # Print store statistics
 
 # Writing a 3MB file will cause the eviction of 3.rtf and 9.rtf

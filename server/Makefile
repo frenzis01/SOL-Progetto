@@ -22,7 +22,7 @@ test2: test/test2.sh bin/client bin/server
 
 test3: test/test3.sh bin/client bin/server
 	@test/test3.sh
-	@test/statistiche.sh 10
+	@test/statistiche.sh 8
 
 bin/server: src/server.c $(LIBS_SERVER_SO)
 	rm -f sock

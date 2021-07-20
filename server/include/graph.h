@@ -6,6 +6,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <assert.h>
 
 typedef struct _edges {
   void *data; //#nodi adiacenti
@@ -18,6 +19,17 @@ typedef struct {
     queue *E;
 } graph;
 
+int graphDetectCycles(graph *g, int (*cmpEdges)(void *, void *));
+
+void freeEdge(void *a);
+
 int graphInsert(graph *g, void *data, queue *edges);
+
+void graphDestroy(graph **g);
+
+int graphAddEdge(graph *g, void *from, void *to, int(*cmpDataNode)(void *, void *));
+
+graph *graphCreate(void (*freeValue)(void *), int (*compare)(void *, void *));
+
 
 #endif

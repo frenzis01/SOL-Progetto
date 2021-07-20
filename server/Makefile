@@ -50,6 +50,10 @@ bin/clientApi: mytests/clientApi.c lib/libclientApi.so $(INCDIR)/protocol.h
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lclientApi -lutils -lclientUtils
 	rm -r -f evicted/*
 
+bin/graph: mytests/graph.c lib/libqueue.so lib/libgraph.so $(INCDIR)/conn.h
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lqueue -lconn -lgraph
+
+
 #shared libs
 lib/libqueue.so: lib/queue.o $(INCDIR)/queue.h
 	$(CC) -shared -o $@ $<
@@ -69,6 +73,9 @@ lib/libfilesys.so: lib/filesys.o lib/libqueue.so lib/libicl_hash.so lib/libutils
 
 lib/libconn.so: lib/conn.o lib/libicl_hash.so lib/libutils.so $(INCDIR)/conn.h $(INCDIR)/protocol.h
 	$(CC) -shared -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lutils -licl_hash
+
+lib/libgraph.so: lib/graph.o lib/libqueue.so $(INCDIR)/graph.h $(INCDIR)/utils.h
+	$(CC) -shared -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lqueue
 
 #client libs
 lib/libparser.so: lib/parser.o lib/libqueue.so lib/libutils.so $(INCDIR)/parser.h

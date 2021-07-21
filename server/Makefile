@@ -51,7 +51,7 @@ bin/clientApi: mytests/clientApi.c lib/libclientApi.so $(INCDIR)/protocol.h
 	rm -r -f evicted/*
 
 bin/graph: mytests/graph.c lib/libqueue.so lib/libgraph.so $(INCDIR)/conn.h
-	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lqueue -lconn -lgraph
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lqueue -lgraph
 
 
 #shared libs

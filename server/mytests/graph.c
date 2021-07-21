@@ -22,7 +22,11 @@ int main(void)
     graphAddEdge(waitfor, clients[2], clients[3], cmpClientNode);
     graphAddEdge(waitfor, clients[2], clients[0], cmpClientNode);
     printClientGraph(waitfor);
-    printf("Deadlock? %s\n", graphDetectCycles(waitfor,cmpClient) ? "Yes" : "No");
+    printf("Deadlock? %s\n", graphDetectCycles(waitfor,cmpClient,0) ? "Yes" : "No");
+    printClientGraph(waitfor);
+    printf("Deadlock? %s\n", graphDetectCycles(waitfor,cmpClient,1) ? "Yes" : "No");
+    printClientGraph(waitfor);
+    printf("Deadlock? %s\n", graphDetectCycles(waitfor,cmpClient,1) ? "Yes" : "No");
     graphDestroy(&waitfor);
     freeArr((void **)clients, NCLIENTS, NULL);
     return 0;

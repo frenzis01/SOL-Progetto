@@ -19,7 +19,7 @@ typedef struct {
     queue *E;
 } graph;
 
-int graphDetectCycles(graph *g, int (*cmpEdges)(void *, void *));
+int graphDetectCycles(graph *g, int (*cmpEdges)(void *, void *), _Bool killFirstCycle);
 
 void freeEdge(void *a);
 

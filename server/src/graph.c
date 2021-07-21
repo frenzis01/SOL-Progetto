@@ -9,9 +9,9 @@ da r.
 */
 #include <graph.h>
 
+#define NOTVISITED 0
 #define ANCESTOR 1
 #define VISITED 2
-#define NOTVISITED 0
 
 void zeroColor(void *arg)
 {
@@ -19,39 +19,47 @@ void zeroColor(void *arg)
     e->color = 0;
 }
 
-int DFSanyCycles(node *curr, int (*cmpEdges)(void *, void *))
+int DFSanyCycles(node *curr, int (*cmpEdges)(void *, void *), _Bool removeEdge)
 {
     ec_z(curr, return 0); // may happen only on the first call
     curr->color = ANCESTOR;
-    node *adjNext = queueDequeue(curr->adj);
+    data *q_adjNext = curr->adj->head;
+    node *adjNext = q_adjNext ? q_adjNext->data : NULL;
     while (adjNext)
     {
-        if (adjNext->color == ANCESTOR)
+        if (adjNext->color == ANCESTOR){
+            if (removeEdge) {
+                queueRemove_node(curr->adj,q_adjNext);
+            }
             return 1;
-        if (adjNext->color == NOTVISITED && DFSanyCycles(adjNext, cmpEdges))
+        }
+        if (adjNext->color == NOTVISITED && DFSanyCycles(adjNext, cmpEdges, removeEdge))
             return 1;
-        adjNext = queueDequeue(curr->adj);
+        q_adjNext = q_adjNext->next;
+        adjNext = q_adjNext ? q_adjNext->data : NULL;
     }
     curr->color = VISITED;
     return 0;
 }
 
-int graphDetectCycles(graph *g, int (*cmpEdges)(void *, void *))
+int graphDetectCycles(graph *g, int (*cmpEdges)(void *, void *), _Bool killFirstCycle)
 {
+    ec_z(g,errno = EINVAL; return -1);
     queueCallback(g->E, zeroColor);
-    return DFSanyCycles(queuePeek(g->E), cmpEdges);
+    return DFSanyCycles(queuePeek(g->E), cmpEdges, killFirstCycle);
 }
 
 queue *wrapQueue(queue *a)
 {
     queue *b;
     ec_z(b = queueCreate(freeNothing, NULL), return NULL);
-    data *curr = queueDequeue(a);
+    data *curr = a ? queueDequeue(a) : NULL;
     while (curr)
     {
         queueEnqueue(b, curr->data);
     }
-    queueDestroy(a);
+    if (a)
+        queueDestroy(a);
     return b;
 }
 
@@ -64,6 +72,7 @@ void freeEdge(void *a)
 
 int graphInsert(graph *g, void *data, queue *dataAdj)
 {
+    ec_z(g,errno = EINVAL; return -1);
     node *newEdge;
     ec_z(newEdge = malloc(sizeof(node)), return -1);
     newEdge->data = data;
@@ -74,7 +83,6 @@ int graphInsert(graph *g, void *data, queue *dataAdj)
 
 void graphDestroy(graph **g)
 {
-    // queueCallback((*g)->E,freeEdge);
     queueDestroy((*g)->E);
     free(*g);
     *g = NULL;
@@ -83,6 +91,7 @@ void graphDestroy(graph **g)
 
 int graphAddEdge(graph *g, void *from, void *to, int (*cmpDataNode)(void *, void *))
 {
+    ec_z(g,errno = EINVAL; return -1);
     // get the nodes corresponding to 'from' and 'to'
     node *f = NULL,
          *t = NULL;

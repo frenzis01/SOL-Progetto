@@ -6,8 +6,8 @@ INCDIR          = ./include
 INCLUDES	= -I $(INCDIR)
 TARGETS	= 	bin/server
 
-LIBS = -L ./lib -lqueue -lutils -llogger -lfilesys -licl_hash -lconn -lpthread
-LIBS_SERVER_SO = lib/libqueue.so lib/libutils.so lib/liblogger.so lib/libfilesys.so lib/libicl_hash.so lib/libconn.so
+LIBS = -L ./lib -lqueue -lutils -llogger -lfilesys -licl_hash -lconn -lpthread -lgraph
+LIBS_SERVER_SO = lib/libqueue.so lib/libutils.so lib/liblogger.so lib/libfilesys.so lib/libicl_hash.so lib/libconn.so lib/libgraph.so
 .PHONY: clean
 .SUFFIXES: .c .h
 
@@ -33,15 +33,15 @@ bin/client: src/client.c lib/libclientApi.so lib/libclientUtils.so lib/libutils.
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lclientApi -lutils -lclientUtils -lparser -lqueue
 
 #My own tests
-bin/filesys: mytests/filesys.c lib/libfilesys.so lib/libqueue.so lib/libconn.so lib/liblogger.so lib/libicl_hash.so
+bin/filesys: mytests/filesys.c lib/libfilesys.so lib/libqueue.so lib/libconn.so lib/liblogger.so lib/libicl_hash.so lib/libgraph.so
 	#filesys
 	rm -f log.txt
-	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lfilesys -lqueue -lconn -llogger -lpthread -licl_hash
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lfilesys -lqueue -lconn -llogger -lpthread -licl_hash -lgraph
 
-bin/mt_filesys: mytests/mt_filesys.c lib/libfilesys.so lib/libqueue.so lib/libconn.so lib/liblogger.so
+bin/mt_filesys: mytests/mt_filesys.c lib/libfilesys.so lib/libqueue.so lib/libconn.so lib/liblogger.so lib/libgraph.so
 	#filesys multithread
 	rm -f log.txt
-	$(CC) $(CFLAGS) -fno-stack-protector $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lfilesys -lqueue -lconn -llogger -licl_hash -lpthread
+	$(CC) $(CFLAGS) -fno-stack-protector $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lfilesys -lqueue -lconn -llogger -licl_hash -lpthread -lgraph
 
 bin/parser:	mytests/parser.c lib/libparser.so lib/libqueue.so 
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lqueue -lparser -lutils
@@ -68,8 +68,8 @@ lib/libicl_hash.so: lib/icl_hash.o $(INCDIR)/icl_hash.h
 lib/liblogger.so: lib/logger.o lib/libutils.so $(INCDIR)/logger.h
 	$(CC) -shared -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lutils -lpthread
 
-lib/libfilesys.so: lib/filesys.o lib/libqueue.so lib/libicl_hash.so lib/libutils.so $(INCDIR)/filesys.h $(INCDIR)/conn.h 
-	$(CC) -shared -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lqueue -licl_hash -lutils -lpthread
+lib/libfilesys.so: lib/filesys.o lib/libqueue.so lib/libicl_hash.so lib/libutils.so lib/libconn.so $(INCDIR)/filesys.h $(INCDIR)/conn.h 
+	$(CC) -shared -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lqueue -licl_hash -lutils -lpthread -lconn
 
 lib/libconn.so: lib/conn.o lib/libicl_hash.so lib/libutils.so $(INCDIR)/conn.h $(INCDIR)/protocol.h
 	$(CC) -shared -o $@ $< -Wl,-rpath='$$ORIGIN/../lib' -L ./lib -lutils -licl_hash

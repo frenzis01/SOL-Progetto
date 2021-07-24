@@ -449,13 +449,17 @@ int openFile(char *path, int createF, int lockF, Client *client, evictedFile **e
  * Sets O_LOCK flag for the requesting client. \n \n 
  * A client doesn't need to be an opener to lock the file
  * @returns 0 success, -1 internal error, 1 O_LOCK owned by a different client or file not found 
- * (EACCES | ENOENT)
+ * (EACCES | ENOENT | EDEADLK)
  * 
  */
 int lockFile(char *path, Client *client)
 {
     int errnobk = errno = 0;
     fnode *fptr;
+
+    ec_nz_f(LOCKCLIENTS);
+    // We have to acquire it here BEFORE lockstore, to avoid circular waiting
+    // case storeRemoveClient acquires lockClients first and then waits for the store
 
     ec_nz_f(LOCKSTORE);
 
@@ -467,6 +471,7 @@ int lockFile(char *path, Client *client)
             return -1;
         }
         ec_nz_f(UNLOCKSTORE);
+        ec_nz_f(UNLOCKCLIENTS);
         return 1;
     }
 
@@ -487,14 +492,29 @@ int lockFile(char *path, Client *client)
     // if (O_LOCK)
     if (fptr->lockedBy && fptr->lockedBy != client->fd)
     {
-        queueEnqueue(fptr->lockersPending, client);
-        if (!errno)
-            errnobk = errno = EACCES;
+        // TODO add graphremovenode in storeevictclient
+        // let's check if the request leads to a deadlock before enqueueing
+        errnobk = errno = EACCES;
+        Client *owner = ge
+void initClients(Client **fakeClients)
+{
+    char *fdBuf = NULL;
+    puts("InitClients");tClient(fptr->lockedBy);
+        ec_z(owner, return -1);
+        graphAddEdge(store.waitfor, client, owner, cmpClient);
+        if (graphDetectCycles(store.waitfor, 1))
+            errnobk = errno = EDEADLK;
+        else
+        {
+            queueEnqueue(fptr->lockersPending, client);
+        }
     }
     else
     {
         fptr->lockedBy = client->fd;
     }
+
+    ec_nz_f(UNLOCKCLIENTS);
 
     ec_nz_f(LOCKFILE);
     if (!errnobk)
@@ -505,7 +525,7 @@ int lockFile(char *path, Client *client)
     ec_nz_f(UNLOCKFILE);
 
     errnobk ? errno = errnobk : errnobk;
-    if (errno == EACCES)
+    if (errno == EACCES || errno == EDEADLK)
         return 1;
     return 0;
 }
@@ -520,6 +540,8 @@ int unlockFile(char *path, Client *client)
     int errnobk = errno = 0;
     fnode *fptr;
 
+    ec_nz_f(LOCKCLIENTS);
+
     ec_nz_f(LOCKSTORE);
     if ((fptr = storeSearch(path)) == NULL)
     {
@@ -529,6 +551,7 @@ int unlockFile(char *path, Client *client)
             return -1;
         }
         ec_nz_f(UNLOCKSTORE);
+        ec_nz_f(UNLOCKCLIENTS);
         return 1;
     }
 
@@ -560,10 +583,13 @@ int unlockFile(char *path, Client *client)
         {
             fptr->lockedBy = (tmp)->fd;
             toRet = (tmp)->fd;
+            graphRemoveEdge(store.waitfor, tmp, client, cmpClient);
         }
         else
             fptr->lockedBy = 0;
     }
+
+    ec_nz_f(UNLOCKCLIENTS);
 
     ec_nz_f(LOCKFILE);
     if (!errnobk)
@@ -1084,11 +1110,15 @@ int storeInit(size_t maxNfiles, size_t maxSize, size_t evictPolicy)
 {
     errno = 0;
     store.fdict = NULL;
+    store.files = NULL;
+    store.waitfor = NULL;
 
     // files or fdict being NULL during storeDestroy is not a problem
     ec_nz(pthread_mutex_init(&(store.lockStore), NULL), storeDestroy(); return -1;);
     ec_z(store.files = queueCreate(freeFile, cmpFile), storeDestroy(); return -1;);
     ec_z(store.fdict = icl_hash_create(maxNfiles, NULL, cmpPathChar), storeDestroy(); return -1;);
+    ec_z(store.waitfor = graphCreate(freeEdge, cmpClient), storeDestroy(); return -1;);
+
     store.maxNfiles = maxNfiles;
     store.maxSize = maxSize;
     store.currNfiles = 0;
@@ -1108,6 +1138,7 @@ int storeDestroy()
     // These two fail only if INVARG
     icl_hash_destroy(store.fdict, freeNothing, freeNothing);
     queueDestroy(store.files);
+    graphDestroy(&store.waitfor);
     return 0;
 }
 

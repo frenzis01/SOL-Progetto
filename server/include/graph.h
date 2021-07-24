@@ -17,9 +17,10 @@ typedef struct _edges {
 typedef struct {
     int V;
     queue *E;
+    int (*cmp)(void *,void *);
 } graph;
 
-int graphDetectCycles(graph *g, int (*cmpEdges)(void *, void *), _Bool killFirstCycle);
+int graphDetectCycles(graph *g, _Bool killFirstCycle);
 
 void freeEdge(void *a);
 
@@ -28,6 +29,10 @@ int graphInsert(graph *g, void *data, queue *edges);
 void graphDestroy(graph **g);
 
 int graphAddEdge(graph *g, void *from, void *to, int(*cmpDataNode)(void *, void *));
+
+int graphRemoveNode(graph *g, void *toRemove, int (*cmpEdges)(void *, void *));
+
+int graphRemoveEdge(graph *g, void *from, void *to, int (*cmpEdges)(void *, void *));
 
 graph *graphCreate(void (*freeValue)(void *), int (*compare)(void *, void *));
 

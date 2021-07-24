@@ -150,6 +150,13 @@ Client *addClient(int fd)
     return newClient;
 }
 
+Client *getClient(int fd) {
+    char fdBuf[INT_LEN];
+    ec_neg1(snprintf(fdBuf, INT_LEN, "%06d", fd), return NULL);
+    Client *toRet = icl_hash_find(clients, fdBuf);
+    return toRet;
+}
+
 _Bool NoMoreClients()
 {
     ec_nz(LOCKCLIENTS, return 0;);
@@ -178,4 +185,12 @@ char *reqToString(Request *req, int fd)
            free(toRet);
            return NULL);
     return toRet;
+}
+
+int cmpClient(void *a, void *b)
+{
+    Client *c1 = a, *c2 = b;
+    if (c1->fd == c2->fd)
+        return 1;
+    return 0;
 }

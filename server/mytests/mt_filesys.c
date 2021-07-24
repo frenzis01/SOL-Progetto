@@ -33,16 +33,17 @@
 #define FDSTART 20
 
 /*sprintf(ret, "%d_%d_" #s "_%s", i, s, strerror_r(errno,buf,100)); // questo resetta errno*/
-#define log(s, i)                                                        \
-    res = (s);                                                           \
-    strerror_r(errno, buf, 200);                                         \
-    if (res == -1)                                                       \
-    {                                                                    \
-        perror(BCYN "INTERNAL FATAL ERROR" REG); \
-        exit(EXIT_FAILURE);                                              \
-    }                                                                    \
-    sprintf(ret, "%d__%d__" #s "__%s", i, res, buf);                     \
-    puts(ret);                                                           \
+#define log(s, i)                                    \
+    res = (s);                                       \
+    strerror_r(errno, buf, 200);                     \
+    if (res == -1)                                   \
+    {                                                \
+        perror(BCYN "INTERNAL FATAL ERROR" REG);     \
+        puts(BCYN #s REG);                           \
+        exit(EXIT_FAILURE);                          \
+    }                                                \
+    sprintf(ret, "%d__%d__" #s "__%s", i, res, buf); \
+    puts(ret);                                       \
     LoggerLog(ret, strlen(ret));
 
 void initPaths(char **paths);
@@ -73,6 +74,7 @@ int main(void)
     // STUBS init
     initPaths(paths);
     initClients(fakeClients);
+    clients = icl_hash_create(4096,NULL,NULL);
 
     LoggerCreate("log.txt");
     storeInit(100, 1000, 0);
@@ -181,7 +183,7 @@ void *fakeWorker(void *arg)
             strerror_r(errno, buf, 200);
             if (!notify)
             {
-                perror(BCYN "INTERNAL FATAL ERROR" REG);
+                perror(BCYN "INTERNAL FATAL ERROR rt5" REG);
                 exit(EXIT_FAILURE);
             }
             res = 0;
@@ -225,11 +227,17 @@ void initEvicted(evictedFile **evicted)
 
 void initClients(Client **fakeClients)
 {
+    char *fdBuf = NULL;
     puts("InitClients");
     for (size_t i = 0; i < NCLIENTS; i++)
     {
         assert(fakeClients[i] = malloc(sizeof(Client)));
         fakeClients[i]->fd = FDSTART + i;
+
+        fdBuf = calloc(INT_LEN, sizeof(char));
+        snprintf(fdBuf, INT_LEN, "%06d", fakeClients[i]->fd);
+        char *toIns = strdup(fdBuf);
+        icl_hash_insert(clients,toIns, fakeClients[i]);
     }
 }
 

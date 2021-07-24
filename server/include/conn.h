@@ -39,9 +39,7 @@ typedef struct {
 #define REQstr_LEN PATH_MAX + PATH_MAX + 100
 
 
-icl_hash_t *clients;
-pthread_mutex_t lockClients;
-
+int cmpClient(void *a, void *b);
 
 Request *getRequest(int fd);
 
@@ -50,6 +48,8 @@ sigset_t initSigMask();
 void freeRequest(void *arg);
 
 Client *addClient(int fd);
+
+Client *getClient(int fd);
 
 _Bool NoMoreClients();
 

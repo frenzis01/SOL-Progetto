@@ -23,6 +23,7 @@
 #include <queue.h>
 #include <conn.h>
 #include <protocol.h>
+#include <graph.h>
 
 // Structs
 typedef struct
@@ -50,6 +51,10 @@ void *signalHandler(void *args);
 int removeClient(int fd, queue **notifyLockers);
 int manageExit(int fd);
 int statsToLog(size_t maxNclients);
+
+int cmpNodeClient(void *v, void *a);
+
+int printClientGraph(graph *g);
 
 // Useful macros and constants
 #pragma region
@@ -523,14 +528,20 @@ void *worker(void *args)
 
         case LOCK_FILE:
             log(lockFile(req->path, req->client), WK_DIE_ON_ERR);
-            if (errnosave == EACCES) // in this case, the client has to wait
+            if (errnosave == EACCES) // in this case, the client has to wait, but...
             {
+                // let's see if its request leads to a deadlock first
+                //
                 freeRequest(req);
                 free(reqStr);
                 reqStr = NULL;
                 req = NULL;
                 continue; // Worker can handle new requests in the meantime
             }
+            /**
+            if (errnosave == EDEADLK) {
+                // O_LOCK wasn't acquired, it would lead to a deadlock
+            }*/
             break;
 
         case UNLOCK_FILE:
@@ -734,9 +745,11 @@ int removeClient(int fd, queue **notifyLockers)
     Client *toRemove = icl_hash_find(clients, fdBuf);
     ec_z(toRemove, return -1);
     ec_z(*notifyLockers = storeRemoveClient(toRemove), return -1);
+    ec_neg1(graphRemoveNode(store.waitfor,toRemove, cmpClient), return -1);
     ec_neg1(icl_hash_delete(clients, fdBuf, free, free), return -1);
     return 0;
 }
+
 
 int manageExit(int fd)
 {
@@ -765,4 +778,37 @@ int statsToLog(size_t maxNclients)
              store.nEviction,
              maxNclients);
     return LoggerLog(toLog, strnlen(toLog, 500));
+}
+
+
+//TODO move to conn
+int cmpNodeClient(void *v, void *a)
+{
+    node *e = v;
+    Client *c = a, *b = e->data;
+
+    if (c->fd == b->fd)
+        return 1;
+    return 0;
+}
+
+void printClient(void *a)
+{
+    Client *c = ((node*)a)->data;
+    printf("%d ", c->fd);
+    return;
+}
+
+void printClientNode(void *a)
+{
+    node *c = a;
+    printf("%d adjacent to: ", ((Client *)c->data)->fd);
+    queueCallback(c->adj, printClient);
+    puts("");
+}
+
+int printClientGraph(graph *g)
+{
+    queueCallback(g->E, printClientNode);
+    return 0;
 }

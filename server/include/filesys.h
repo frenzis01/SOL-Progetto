@@ -6,7 +6,7 @@
 
 #include <icl_hash.h>
 #include <queue.h>
-#include <logger.h>
+#include <graph.h>
 
 #include <pthread.h>
 #include <utils.h>
@@ -60,6 +60,8 @@ typedef struct {
 
     size_t evictPolicy; // 0 FIFO | 1 LRU
 
+    graph *waitfor;
+
     //stats
     size_t nEviction;
     size_t maxSizeReached;
@@ -68,6 +70,9 @@ typedef struct {
 
 
 FileSystem store;
+
+icl_hash_t *clients;
+pthread_mutex_t lockClients;
 
 #define PATH_LENGTH 2048
 

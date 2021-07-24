@@ -18,7 +18,7 @@
 #define TEST_FILESYS
 
 void initPaths(char **paths);
-void initClients(Client **clients);
+void initClients(Client **clientsArr);
 void initEvicted(evictedFile **evicted);
 void freeArr(void **arr, size_t n, void (*myfree)(void *arg));
 
@@ -31,8 +31,8 @@ int main(void)
 #define FDSTART 20
 #ifdef TEST_FILESYS
 
-    // Create some clients
-    Client *clients[NCLIENTS];
+    // Create some clientsArr
+    Client *clientsArr[NCLIENTS];
     evictedFile *evicted[NFILES];
     queue *evictedfiles;
 
@@ -41,18 +41,19 @@ int main(void)
     // char *contents[NFILES];
 
     initPaths(paths);
-    initClients(clients);
+    clients = icl_hash_create(4096,NULL,NULL);
+    initClients(clientsArr);
     initEvicted(evicted);
 
     storeInit(100, 100, 1);
 
     // OPENFILE O_CREAT,O_LOCK
-    assert(!openFile(paths[0], 1, 1, clients[0], &evicted[0]));
+    assert(!openFile(paths[0], 1, 1, clientsArr[0], &evicted[0]));
 
     // OPENFILE senza O_LOCK
     for (size_t i = 1; i < NFILES; i++)
     {
-        assert(!openFile(paths[i], 1, 0, clients[i % NCLIENTS], &evicted[0]));
+        assert(!openFile(paths[i], 1, 0, clientsArr[i % NCLIENTS], &evicted[0]));
         if (evicted[0])
         {
             printEvicted(evicted[0]);
@@ -66,15 +67,15 @@ int main(void)
 
     // WRITEFILE success
     //      nota: andrebbe fatta strlen(MSG)+1 per includere il carattere di terminazione
-    assert(!appendToFile(paths[0], MSG, strlen(MSG), clients[0], &evictedfiles, 1));
-    // printf("%d\n",appendToFile(paths[0], MSG, strlen(MSG), clients[0], &evictedfiles, 1));
+    assert(!appendToFile(paths[0], MSG, strlen(MSG), clientsArr[0], &evictedfiles, 1));
+    // printf("%d\n",appendToFile(paths[0], MSG, strlen(MSG), clientsArr[0], &evictedfiles, 1));
     // perror("append");
 
     // WRITEFILE fails
-    assert(2 == appendToFile(paths[0], '\0', 1, clients[0], &evictedfiles, 1));
+    assert(2 == appendToFile(paths[0], '\0', 1, clientsArr[0], &evictedfiles, 1));
 
     // READFILE
-    assert(!readFile(paths[0], &evicted[1], clients[0], 0));
+    assert(!readFile(paths[0], &evicted[1], clientsArr[0], 0));
     // printf("\tREADFILE PATH: %.*s\n", (int)strlen(paths[0]), evicted[1]->path);
     // printf("\tREADFILE_CONTENT 1: %.*s\n", (int)evicted[1]->size, evicted[1]->content);
 
@@ -82,17 +83,17 @@ int main(void)
 
     // READNFILES
     queue *readFiles = NULL;
-    assert(10 == readNfiles(0, &readFiles, clients[0]));
+    assert(10 == readNfiles(0, &readFiles, clientsArr[0]));
     // printf("\tREADNFILES RESULT\n");
     // queueCallback(readFiles,printEvicted);
     // puts("\tREADNFILES END");
     queueDestroy(readFiles);
 
     // APPENDTOFILE
-    assert(!appendToFile(paths[0], MSG, strlen(MSG) + 1, clients[0], &evictedfiles, 0));
+    assert(!appendToFile(paths[0], MSG, strlen(MSG) + 1, clientsArr[0], &evictedfiles, 0));
 
     // READNFILES
-    readNfiles(0, &readFiles, clients[0]);
+    readNfiles(0, &readFiles, clientsArr[0]);
     //puts("\tREADNFILES RESULT");
     //queueCallback(readFiles,printEvicted);
     //puts("\tREADNFILES END");
@@ -100,39 +101,39 @@ int main(void)
 
     // REMOVEFILE
 
-    assert(!removeFile(paths[0], clients[0], &evicted[0]));
+    assert(!removeFile(paths[0], clientsArr[0], &evicted[0]));
     assert(!errno);
     // printEvicted(evicted[0]);
     freeEvicted(evicted[0]);
 
     // LOCKFILE / UNLOCKFILE
     // Simple lock/unlock
-    assert(!lockFile(paths[1], clients[1]));
+    assert(!lockFile(paths[1], clientsArr[1]));
 
-    assert(!appendToFile(paths[1], MSG, strlen(MSG) + 1, clients[1], &evictedfiles, 0));
-    assert(openFile(paths[1], 0, 0, clients[2], &evicted[0]) == 1); //this fails
-    assert(unlockFile(paths[1], clients[2]) == 1);
+    assert(!appendToFile(paths[1], MSG, strlen(MSG) + 1, clientsArr[1], &evictedfiles, 0));
+    assert(openFile(paths[1], 0, 0, clientsArr[2], &evicted[0]) == 1); //this fails
+    assert(unlockFile(paths[1], clientsArr[2]) == 1);
 
-    assert(unlockFile(paths[1], clients[1]) == 0);
+    assert(unlockFile(paths[1], clientsArr[1]) == 0);
 
     // LockersPending
-    assert(!lockFile(paths[1], clients[1]));
-    assert(!lockFile(paths[1], clients[1]));
-    assert(lockFile(paths[1], clients[2]) == 1);
-    assert(lockFile(paths[1], clients[3]) == 1);
+    assert(!lockFile(paths[1], clientsArr[1]));
+    assert(!lockFile(paths[1], clientsArr[1]));
+    assert(lockFile(paths[1], clientsArr[2]) == 1);
+    assert(lockFile(paths[1], clientsArr[3]) == 1);
 
-    assert(unlockFile(paths[1], clients[1]) == clients[2]->fd);
-    assert(!lockFile(paths[1], clients[2]));
-    assert(unlockFile(paths[1], clients[2]) == clients[3]->fd);
-    assert(unlockFile(paths[1], clients[3]) == 0);
+    assert(unlockFile(paths[1], clientsArr[1]) == clientsArr[2]->fd);
+    assert(!lockFile(paths[1], clientsArr[2]));
+    assert(unlockFile(paths[1], clientsArr[2]) == clientsArr[3]->fd);
+    assert(unlockFile(paths[1], clientsArr[3]) == 0);
 
     // CLOSEFILE
-    assert(closeFile(paths[1], clients[1]) == 0);
-    assert(closeFile(paths[1], clients[1]) == 1); // EACCES
-    assert(closeFile(paths[1], clients[3]) == 1); // EACCES
+    assert(closeFile(paths[1], clientsArr[1]) == 0);
+    assert(closeFile(paths[1], clientsArr[1]) == 1); // EACCES
+    assert(closeFile(paths[1], clientsArr[3]) == 1); // EACCES
 
-    assert(!lockFile(paths[2], clients[2]));
-    assert(!unlockFile(paths[2], clients[2]));
+    assert(!lockFile(paths[2], clientsArr[2]));
+    assert(!unlockFile(paths[2], clientsArr[2]));
     // queueCallback(store.files,printFnode); //LRU ok!
 
     assert(!storeDestroy()); // sembra funzionare
@@ -150,7 +151,7 @@ int main(void)
     {
         // printf("%ld\n", store.currNfiles);
         // queueCallback(store.files,printFnode); //LRU ok!
-        assert(!openFile(paths[i], 1, 0, clients[i % NCLIENTS], &evicted[0]));
+        assert(!openFile(paths[i], 1, 0, clientsArr[i % NCLIENTS], &evicted[0]));
         if (evicted[0])
         {
             printEvicted(evicted[0]);
@@ -160,36 +161,36 @@ int main(void)
     queueCallback(store.files, printFnode); //LRU ok!
 
     puts("debug");
-    assert(0 == lockFile(paths[5], clients[1]));
-    assert(1 == lockFile(paths[5], clients[2]));
-    assert(1 == lockFile(paths[5], clients[3]));
+    assert(0 == lockFile(paths[5], clientsArr[1]));
+    assert(1 == lockFile(paths[5], clientsArr[2]));
+    assert(1 == lockFile(paths[5], clientsArr[3]));
 
     // only five file files are in the storage
     // strlen(MSG) == 14
-    assert(0 == appendToFile(paths[5], MSG, strlen(MSG) + 1, clients[5 % NCLIENTS], &evictedfiles, 0));
-    assert(0 == appendToFile(paths[5], MSG, strlen(MSG) + 1, clients[5 % NCLIENTS], &evictedfiles, 0));
-    assert(0 == appendToFile(paths[6], MSG, strlen(MSG) + 1, clients[6 % NCLIENTS], &evictedfiles, 0));
+    assert(0 == appendToFile(paths[5], MSG, strlen(MSG) + 1, clientsArr[5 % NCLIENTS], &evictedfiles, 0));
+    assert(0 == appendToFile(paths[5], MSG, strlen(MSG) + 1, clientsArr[5 % NCLIENTS], &evictedfiles, 0));
+    assert(0 == appendToFile(paths[6], MSG, strlen(MSG) + 1, clientsArr[6 % NCLIENTS], &evictedfiles, 0));
     queueCallback(evictedfiles, printEvicted); //
     queueDestroy(evictedfiles);
 
     // let's try to evict lockers
-    assert(0 == lockFile(paths[6], clients[1]));
-    assert(1 == lockFile(paths[6], clients[2]));
-    assert(1 == lockFile(paths[6], clients[3]));
+    assert(0 == lockFile(paths[6], clientsArr[1]));
+    assert(1 == lockFile(paths[6], clientsArr[2]));
+    assert(1 == lockFile(paths[6], clientsArr[3]));
 
-    assert(clients[2]->fd == unlockFile(paths[6], clients[1]));
+    assert(clientsArr[2]->fd == unlockFile(paths[6], clientsArr[1]));
     // clietns[2] should have acquired the lock
-    assert((clients[2])->fd == ((fnode *)(((data *)(icl_hash_find(store.fdict, paths[6])))->data))->lockedBy);
-    queue *notify = storeRemoveClient(clients[2]);
-    assert(clients[3] == queueFind(notify,clients[3],NULL));
-    assert((clients[3])->fd == ((fnode *)(((data *)(icl_hash_find(store.fdict, paths[6])))->data))->lockedBy);
+    assert((clientsArr[2])->fd == ((fnode *)(((data *)(icl_hash_find(store.fdict, paths[6])))->data))->lockedBy);
+    queue *notify = storeRemoveClient(clientsArr[2]);
+    assert(clientsArr[3] == queueFind(notify,clientsArr[3],NULL));
+    assert((clientsArr[3])->fd == ((fnode *)(((data *)(icl_hash_find(store.fdict, paths[6])))->data))->lockedBy);
     queueDestroy(notify);
 
     storeStats();
     storeDestroy();
 
     freeArr((void **)paths, NFILES, NULL);
-    freeArr((void **)clients, NCLIENTS, NULL);
+    freeArr((void **)clientsArr, NCLIENTS, NULL);
 
 #endif
     return 0;
@@ -219,13 +220,18 @@ void initEvicted(evictedFile **evicted)
     }
 }
 
-void initClients(Client **clients)
+void initClients(Client **clientsArr)
 {
     puts("InitClients");
+    char *fdBuf = NULL;
     for (size_t i = 0; i < NCLIENTS; i++)
     {
-        assert(clients[i] = malloc(sizeof(Client)));
-        clients[i]->fd = FDSTART + i;
+        assert(clientsArr[i] = malloc(sizeof(Client)));
+        clientsArr[i]->fd = FDSTART + i;
+
+        fdBuf = calloc(INT_LEN, sizeof(char));
+        snprintf(fdBuf, INT_LEN, "%06d", clientsArr[i]->fd);
+        icl_hash_insert(clients,strdup(fdBuf), clientsArr[i]);
     }
 }
 

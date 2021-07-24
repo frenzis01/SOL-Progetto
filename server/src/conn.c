@@ -135,26 +135,34 @@ void freeRequest(void *arg)
 Client *addClient(int fd)
 {
     Client *newClient = NULL;
-    char fdBuf[INT_LEN], *fdTmp;
+    char *fdBuf = calloc(INT_LEN + 1, sizeof(char));
+
+    ec_z(fdBuf, return NULL);
     ec_z(newClient = malloc(sizeof(Client)), return NULL;);
     newClient->fd = fd;
-    if (snprintf(fdBuf, INT_LEN, "%06d", fd) < 0)
-        return NULL;
-    ec_nz(LOCKCLIENTS, free(newClient); return NULL);
+    ec_neg(snprintf(fdBuf, INT_LEN, "%06d", fd), free(fdBuf); free(newClient); return NULL);
+    ec_nz(LOCKCLIENTS, free(fdBuf); free(newClient); return NULL);
 
-    ec_nz(icl_hash_find(clients, fdBuf), free(newClient); UNLOCKCLIENTS; errno = EADDRINUSE; return NULL);
-    ec_z(fdTmp = strndup(fdBuf, INT_LEN), return NULL);
-    icl_hash_insert(clients, fdTmp, newClient);
+    ec_nz(icl_hash_find(clients, fdBuf), free(fdBuf); free(newClient); UNLOCKCLIENTS; errno = EADDRINUSE; return NULL);
+    icl_hash_insert(clients, fdBuf, newClient);
 
-    ec_nz(UNLOCKCLIENTS, free(newClient); return NULL);
+    ec_nz(UNLOCKCLIENTS, free(fdBuf); free(newClient); return NULL);
     return newClient;
 }
 
 Client *getClient(int fd) {
-    char fdBuf[INT_LEN];
+    char fdBuf[INT_LEN + 1];
     ec_neg1(snprintf(fdBuf, INT_LEN, "%06d", fd), return NULL);
     Client *toRet = icl_hash_find(clients, fdBuf);
     return toRet;
+}
+
+Client *wrapClient(int fd)
+{
+    Client *c = malloc (sizeof(Client));
+    ec_z(c, return NULL);
+    c->fd = fd;
+    return c;
 }
 
 _Bool NoMoreClients()

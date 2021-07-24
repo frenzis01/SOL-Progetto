@@ -17,10 +17,10 @@ int main(void)
     Client *clients[NCLIENTS];
     initClients(clients);
     graph *waitfor = graphCreate(freeEdge, cmpClient);
-    graphAddEdge(waitfor, clients[0], clients[1], cmpClient);
-    graphAddEdge(waitfor, clients[1], clients[2], cmpClient);
-    graphAddEdge(waitfor, clients[2], clients[3], cmpClient);
-    graphAddEdge(waitfor, clients[2], clients[0], cmpClient);
+    graphAddEdge(waitfor, clients[0], clients[1]);
+    graphAddEdge(waitfor, clients[1], clients[2]);
+    graphAddEdge(waitfor, clients[2], clients[3]);
+    graphAddEdge(waitfor, clients[2], clients[0]);
     printClientGraph(waitfor);
     
     printf("Deadlock? %s\n", graphDetectCycles(waitfor,0) ? "Yes" : "No");
@@ -32,17 +32,17 @@ int main(void)
 
 
     puts("Adding back 22->20");
-    graphAddEdge(waitfor, clients[2], clients[0], cmpClient);
+    graphAddEdge(waitfor, clients[2], clients[0]);
     printClientGraph(waitfor);
     printf("Deadlock? %s\n", graphDetectCycles(waitfor,0) ? "Yes" : "No");
     
-    graphRemoveNode(waitfor, clients[0],cmpClient);
+    graphRemoveNode(waitfor, clients[0]);
     printClientGraph(waitfor);
     printf("Deadlock? %s\n", graphDetectCycles(waitfor,1) ? "Yes" : "No");
 
-    graphAddEdge(waitfor, clients[2], clients[0], cmpClient);
+    graphAddEdge(waitfor, clients[2], clients[0]);
     printClientGraph(waitfor);
-    graphRemoveEdge(waitfor, clients[2], clients[0], cmpClient);
+    graphRemoveEdge(waitfor, clients[2], clients[0]);
     printClientGraph(waitfor);
     printf("Deadlock? %s\n", graphDetectCycles(waitfor,0) ? "Yes" : "No");
     

@@ -28,11 +28,11 @@ int graphInsert(graph *g, void *data, queue *edges);
 
 void graphDestroy(graph **g);
 
-int graphAddEdge(graph *g, void *from, void *to, int(*cmpDataNode)(void *, void *));
+int graphAddEdge(graph *g, void *from, void *to);
 
-int graphRemoveNode(graph *g, void *toRemove, int (*cmpEdges)(void *, void *));
+int graphRemoveNode(graph *g, void *toRemove);
 
-int graphRemoveEdge(graph *g, void *from, void *to, int (*cmpEdges)(void *, void *));
+int graphRemoveEdge(graph *g, void *from, void *to);
 
 graph *graphCreate(void (*freeValue)(void *), int (*compare)(void *, void *));
 

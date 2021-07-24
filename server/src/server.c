@@ -273,9 +273,9 @@ void *dispatcher(void *arg)
     // fd_c == fd_client
     int fd_skt, fd_c, fd;
     char
-        toLog[LOGBUF_LEN],
-        // buf[BUF], //read buffer
-        fdBuf[INT_LEN];
+        toLog[LOGBUF_LEN];
+    // buf[BUF], //read buffer
+    // fdBuf[INT_LEN];
     // *fdTmp;
     fd_set set, read_set;
 
@@ -367,11 +367,10 @@ void *dispatcher(void *arg)
                     else
                     {
                         int sig = 0;
-                        readn(SIGNAL_READ, &sig, sizeof(int));
+                        ec_neg1(readn(SIGNAL_READ, &sig, sizeof(int)), DS_DIE_ON_ERR);
                         if (sig == SIGUSR1)
                         { // print Stats
-                            ec_z(requestor = malloc(sizeof(Client)), DS_DIE_ON_ERR);
-                            requestor->fd = -1;
+                            ec_z(requestor = wrapClient(-1), DS_DIE_ON_ERR);
                             PUSH_REQUEST(requestor, DS_DIE_ON_ERR);
                         }
                         else                           // HUP_EXITING but still some clients connected
@@ -385,10 +384,7 @@ void *dispatcher(void *arg)
                     FD_CLR(fd, &set);
                     if (fd == fd_hwm)
                         fd_hwm--;
-                    ec_neg1(snprintf(fdBuf, INT_LEN, "%06d", fd), DS_DIE_ON_ERR);
-                    ec_nz(LOCKCLIENTS, DS_DIE_ON_ERR);
-                    ec_z(requestor = icl_hash_find(clients, fdBuf), DS_DIE_ON_ERR);
-                    ec_nz(UNLOCKCLIENTS, DS_DIE_ON_ERR);
+                    ec_z(requestor = wrapClient(fd), DS_DIE_ON_ERR);
                     PUSH_REQUEST(requestor, DS_DIE_ON_ERR);
                 }
             }
@@ -490,6 +486,7 @@ void *worker(void *args)
         // We have a request or a disconnection from a client
         fd = requestor->fd;
         req = getRequest(fd);
+        free(requestor);
 
         if (!req && (errno == ENOTCONN || errno == ECONNRESET)) // client closed the socket
         {
@@ -742,20 +739,31 @@ int removeClient(int fd, queue **notifyLockers)
     char fdBuf[INT_LEN];
     ec_neg1(snprintf(fdBuf, INT_LEN, "%06d", fd), return -1);
     // remove from storage
-    Client *toRemove = icl_hash_find(clients, fdBuf);
+    // Client *toRemove = icl_hash_find(clients, fdBuf);
+    Client *toRemove = getClient(fd);
     ec_z(toRemove, return -1);
     ec_z(*notifyLockers = storeRemoveClient(toRemove), return -1);
-    ec_neg1(graphRemoveNode(store.waitfor,toRemove, cmpClient), return -1);
+    ec_neg1(graphRemoveNode(store.waitfor, toRemove), return -1);
     ec_neg1(icl_hash_delete(clients, fdBuf, free, free), return -1);
     return 0;
 }
-
 
 int manageExit(int fd)
 {
     queue *notifyLockers = NULL;
     ec_nz(LOCKCLIENTS, return -1);
     ec_neg1(removeClient(fd, &notifyLockers), UNLOCKCLIENTS; return -1);
+    
+    
+    // TODO remove this
+    printf("Removing %d\n", fd);
+    void *k, *d;
+    icl_entry_t *tmpent;
+    size_t i;
+    icl_hash_foreach(clients, i, tmpent, k, d) printf("%s\n", (char *)k);
+    printf("fin_Removing %d\n", fd);
+    
+    
     ec_nz(UNLOCKCLIENTS, return -1);
     // if there was at least one pending locker on a file O_LOCKed by
     // the removed client, we must notify it of the successful lockFile()
@@ -780,7 +788,6 @@ int statsToLog(size_t maxNclients)
     return LoggerLog(toLog, strnlen(toLog, 500));
 }
 
-
 //TODO move to conn
 int cmpNodeClient(void *v, void *a)
 {
@@ -794,7 +801,7 @@ int cmpNodeClient(void *v, void *a)
 
 void printClient(void *a)
 {
-    Client *c = ((node*)a)->data;
+    Client *c = ((node *)a)->data;
     printf("%d ", c->fd);
     return;
 }

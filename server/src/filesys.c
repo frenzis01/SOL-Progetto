@@ -417,7 +417,7 @@ int openFile(char *path, int createF, int lockF, Client *client, evictedFile **e
     ec_nz_f(UNLOCKFILE);
 
     // O_LOCK check
-    if ((fptr->lockedBy && fptr->lockedBy != client->fd))
+    if (fptr->lockedBy && fptr->lockedBy != client->fd)
     {
         errnobk = errno = EACCES;
     }
@@ -458,7 +458,7 @@ int lockFile(char *path, Client *client)
     fnode *fptr;
 
     ec_nz_f(LOCKCLIENTS);
-    // We have to acquire it here BEFORE lockstore, to avoid circular waiting
+    // We have to acquire it here BEFORE lockstore, to avoid circular waiting in
     // case storeRemoveClient acquires lockClients first and then waits for the store
 
     ec_nz_f(LOCKSTORE);
@@ -492,16 +492,14 @@ int lockFile(char *path, Client *client)
     // if (O_LOCK)
     if (fptr->lockedBy && fptr->lockedBy != client->fd)
     {
-        // TODO add graphremovenode in storeevictclient
         // let's check if the request leads to a deadlock before enqueueing
         errnobk = errno = EACCES;
-        Client *owner = ge
-void initClients(Client **fakeClients)
-{
-    char *fdBuf = NULL;
-    puts("InitClients");tClient(fptr->lockedBy);
-        ec_z(owner, return -1);
-        graphAddEdge(store.waitfor, client, owner, cmpClient);
+        Client *owner = getClient(fptr->lockedBy);
+        void *k, *d;
+        icl_entry_t *tmpent;
+        size_t i;
+        ec_z(owner, printf("\n\n\n%d %d\n\n\n", fptr->lockedBy, client->fd); icl_hash_foreach(clients,i,tmpent,k,d)printf("%s\n",(char*)k); return -1);
+        graphAddEdge(store.waitfor, client, owner);
         if (graphDetectCycles(store.waitfor, 1))
             errnobk = errno = EDEADLK;
         else
@@ -581,9 +579,9 @@ int unlockFile(char *path, Client *client)
         Client *tmp = queueDequeue(fptr->lockersPending);
         if (tmp)
         {
-            fptr->lockedBy = (tmp)->fd;
-            toRet = (tmp)->fd;
-            graphRemoveEdge(store.waitfor, tmp, client, cmpClient);
+            fptr->lockedBy = tmp->fd;
+            toRet = tmp->fd;
+            graphRemoveEdge(store.waitfor, tmp, client);
         }
         else
             fptr->lockedBy = 0;

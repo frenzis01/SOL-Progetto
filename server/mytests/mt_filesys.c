@@ -28,7 +28,7 @@
 #define LOG_TEST 16384
 
 // TEST FILESYSTEM
-#define NCLIENTS 4
+#define NCLIENTS 7
 #define NFILES 10
 #define FDSTART 20
 
@@ -73,8 +73,8 @@ int main(void)
 
     // STUBS init
     initPaths(paths);
-    initClients(fakeClients);
     clients = icl_hash_create(4096,NULL,NULL);
+    initClients(fakeClients);
 
     LoggerCreate("log.txt");
     storeInit(100, 1000, 0);
@@ -234,10 +234,13 @@ void initClients(Client **fakeClients)
         assert(fakeClients[i] = malloc(sizeof(Client)));
         fakeClients[i]->fd = FDSTART + i;
 
-        fdBuf = calloc(INT_LEN, sizeof(char));
+        fdBuf = calloc(INT_LEN + 1, sizeof(char));
         snprintf(fdBuf, INT_LEN, "%06d", fakeClients[i]->fd);
-        char *toIns = strdup(fdBuf);
-        icl_hash_insert(clients,toIns, fakeClients[i]);
+        // char *toIns = strdup(fdBuf);
+
+        icl_hash_insert(clients,fdBuf, fakeClients[i]);
+
+        printf("%d %s %s\n", fakeClients[i]->fd, fdBuf, getClient(fakeClients[i]->fd) ? "Found" : "Not Found");
     }
 }
 

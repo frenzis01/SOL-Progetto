@@ -36,6 +36,10 @@ int main(void)
     printClientGraph(waitfor);
     printf("Deadlock? %s\n", graphDetectCycles(waitfor,0) ? "Yes" : "No");
     
+    puts("Redirect 20->21");
+    graphRedirect(waitfor,clients[0],clients[1]);
+    printClientGraph(waitfor);
+    puts("Removing 20");
     graphRemoveNode(waitfor, clients[0]);
     printClientGraph(waitfor);
     printf("Deadlock? %s\n", graphDetectCycles(waitfor,1) ? "Yes" : "No");

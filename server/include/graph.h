@@ -36,5 +36,7 @@ int graphRemoveEdge(graph *g, void *from, void *to);
 
 graph *graphCreate(void (*freeValue)(void *), int (*compare)(void *, void *));
 
+int graphRedirect(graph *g, void *from, void *to);
+
 
 #endif

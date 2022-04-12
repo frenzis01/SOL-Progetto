@@ -752,11 +752,11 @@ int manageExit(int fd)
 {
     queue *notifyLockers = NULL;
     ec_nz(LOCKCLIENTS, return -1);
+    // TODO remove this
+    printf("Removing %d\n", fd);
     ec_neg1(removeClient(fd, &notifyLockers), UNLOCKCLIENTS; return -1);
     
     
-    // TODO remove this
-    printf("Removing %d\n", fd);
     void *k, *d;
     icl_entry_t *tmpent;
     size_t i;

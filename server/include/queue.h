@@ -57,6 +57,8 @@ void *queueRemove(queue *q, void *toRemove, int (*compare)(void *, void *));
 
 int queueCallback(queue *q, void (callback)(void *));
 
+int queueCallbackParam(queue *q, void(callback)(void *,void *, void *,void *), void *up1, void *up2, void *up3);
+
 void *queueRemove_node(queue *q, data *toRemove);
 
 #endif

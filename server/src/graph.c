@@ -59,6 +59,7 @@ queue *wrapQueue(queue *a)
     while (curr)
     {
         queueEnqueue(b, curr->data);
+        curr = queueDequeue(a);
     }
     if (a)
         queueDestroy(a);
@@ -205,6 +206,7 @@ int graphRemoveEdge(graph *g, void *from, void *to)
     {
         ec_z(toInsertAdj = queueCreate(freeNothing, NULL), goto cleanup);
         ec_neg1(graphInsert(g, from, toInsertAdj), queueDestroy(toInsertAdj); goto cleanup);
+        f = queueFind(g->E, _from, NULL);
     }
 
     queueRemove(f->adj, _to, g->cmp);
@@ -226,4 +228,66 @@ graph *graphCreate(void (*freeValue)(void *), int (*compare)(void *, void *))
     ec_z(g->E = queueCreate(freeValue, compare), free(g); return NULL);
     g->cmp = compare;
     return g;
+}
+
+/**
+ * @brief find all nodes that are pointing to f and redirect them to q,
+          without removing the old edge
+ * 
+ * @param arg 
+ * @param old 
+ * @param new 
+ * @param cmp 
+ */
+void redirect(void *arg, void *old, void *new, void *cmp){
+  node *n = arg;
+  // queueRemove(n->adj,old,cmp);
+  int (*compare)(void*,void*) = cmp; // TODO bad warning
+  if (!compare(arg,new) && queueFind(n->adj,old,cmp)){
+      if(!queueFind(n->adj,new,cmp))
+          queueEnqueue(n->adj, new);  
+  }
+}
+
+/**
+ * @brief if a node points to 'from', adds an edge pointing to 'to', but doesn't remove 'from'
+ * 
+ * @param g 
+ * @param from 'old' value to which other nodes are pointing
+ * @param to 'new' to which other nodes will point instead of 'from'
+ * @return int 
+ */
+int graphRedirect(graph *g, void *from, void *to){
+    ec_z(g, errno = EINVAL; return -1);
+    // get the nodes corresponding to 'from' and 'to'
+    node *f = NULL,
+         *_from = NULL,
+         *_to = NULL,
+         *t = NULL;
+
+    ec_z(_from = wrapNode(from), return -1);
+    ec_z(_to = wrapNode(to), free(_from); return -1);
+
+    if ((f = queueFind(g->E, _from, NULL))){
+        // add 'to' if it doesn't exist
+        if (! (t = queueFind(g->E, _to, NULL))) {
+            queue *toInsertAdj = NULL;
+            ec_z(toInsertAdj = queueCreate(freeNothing, NULL), goto cleanup);
+            ec_neg1(graphInsert(g, to, toInsertAdj), queueDestroy(toInsertAdj); goto cleanup);
+            t = queueFind(g->E, _to, NULL);
+        }
+        // find all nodes that are pointing to f and redirect them to q,
+        // without removing the old edge
+        queueCallbackParam(g->E,redirect,f,t,g->cmp);
+
+    }
+    // else // nothing to do
+
+    free(_from);
+    free(_to);
+    return 0;
+    cleanup:
+    free(_from);
+    free(_to);
+    return -1;
 }

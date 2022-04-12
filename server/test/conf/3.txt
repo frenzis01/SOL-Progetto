@@ -1,5 +1,5 @@
 capacity=32000000
-workers=8
+workers=1
 sockname=sock
 nfiles=100
 evictPolicy=1

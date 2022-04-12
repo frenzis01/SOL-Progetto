@@ -204,6 +204,29 @@ int queueCallback(queue *q, void(callback)(void *))
 }
 
 /**
+ * executes 'callback' on every element of the queue.
+ * 'callback' takes also three additional user defined parameters
+ * Stops prematurely if errno gets set
+ * @param callback must set errno only in case of error (!)
+ * @returns 0 success, -1 error
+ */
+int queueCallbackParam(queue *q, void(callback)(void *,void *, void *,void *), void *up1, void *up2, void *up3)
+{
+	errno = 0;
+	eq_z(q, EINVAL, return 0;);
+
+	data *curr = q->head;
+	while (!errno && curr)
+	{
+		// errno might get dirty here
+		callback(curr->data,up1,up2,up3);
+		curr = curr->next;
+	}
+	if (errno) return -1;
+	return 0;
+}
+
+/**
  * Removes a node from the queue and returns its value
  */
 void *queueRemove_node(queue *q, data *toRemove)

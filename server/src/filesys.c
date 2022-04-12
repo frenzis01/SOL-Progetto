@@ -727,8 +727,9 @@ int removeFile(char *path, Client *client, evictedFile **evicted)
  */
 queue *storeRemoveClient(Client *client)
 {
-    queue *notifyLockers;
+    queue *notifyLockers, *notifyFailedLockers;
     ec_z(notifyLockers = queueCreate(freeNothing, cmpFd), return NULL);
+    ec_z(notifyFailedLockers = queueCreate(freeNothing, cmpFd), return NULL);
     ec_nz(LOCKSTORE, goto rmvclnt_cleanup);
 
     data *curr = store.files->head;
@@ -754,6 +755,15 @@ queue *storeRemoveClient(Client *client)
             Client *tmp = queueDequeue(fptr->lockersPending);
             if (tmp)
             {
+                Client *owner = getClient(fptr->lockedBy);
+                ec_z(owner, perror("ESPLOSO");); // TODO
+                // If a node points to old owner, add an edge pointing to tmp
+                // without removing the previous edge
+                printf("\n\tREDIRECTING %d -> %d\n\n", owner->fd, tmp->fd);
+                graphRedirect(store.waitfor,owner,tmp);
+                if (graphDetectCycles(store.waitfor,1))
+                    queueEnqueue(notifyFailedLockers,tmp); // TODO
+                // I should put this in a while loop... Doesn't stop until cycles are removed
                 fptr->lockedBy = (tmp)->fd;
                 ec_neg1(queueEnqueue(notifyLockers, tmp), goto rmvclnt_cleanup);
             }

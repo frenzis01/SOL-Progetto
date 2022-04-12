@@ -2,7 +2,7 @@
 #TEST3 (aka stress test)
 BWHT="\033[1;37m"
 REG="\x1b[0m"
-TIMER=30
+TIMER=5
 export BWHT
 
 echo "
@@ -11,7 +11,7 @@ echo "
 rm -r -f test/read/* test/evicted/* log.txt
 
 #run server in background
-bin/server test/conf/3.txt &
+bin/server test/conf/3.txt x &
 export S_PID=$!
 
 echo -e $BWHT "

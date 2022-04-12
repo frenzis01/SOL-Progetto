@@ -752,23 +752,30 @@ queue *storeRemoveClient(Client *client)
 
         if (fptr->lockedBy == client->fd)
         {
-            Client *tmp = queueDequeue(fptr->lockersPending);
-            if (tmp)
+            _Bool cycle = 0;
+            do
             {
-                Client *owner = getClient(fptr->lockedBy);
-                ec_z(owner, perror("ESPLOSO");); // TODO
-                // If a node points to old owner, add an edge pointing to tmp
-                // without removing the previous edge
-                printf("\n\tREDIRECTING %d -> %d\n\n", owner->fd, tmp->fd);
-                graphRedirect(store.waitfor,owner,tmp);
-                if (graphDetectCycles(store.waitfor,1))
-                    queueEnqueue(notifyFailedLockers,tmp); // TODO
-                // I should put this in a while loop... Doesn't stop until cycles are removed
-                fptr->lockedBy = (tmp)->fd;
-                ec_neg1(queueEnqueue(notifyLockers, tmp), goto rmvclnt_cleanup);
-            }
-            else
-                fptr->lockedBy = 0;
+                cycle = 0;
+                Client *tmp = queueDequeue(fptr->lockersPending);
+                if (tmp)
+                {
+                    Client *owner = getClient(fptr->lockedBy);
+                    ec_z(owner, perror("ESPLOSO");); // TODO
+                    // If a node points to old owner, add an edge pointing to tmp
+                    // without removing the previous edge
+                    printf("\n\tREDIRECTING %d -> %d\n\n", owner->fd, tmp->fd);
+                    graphRedirect(store.waitfor, owner, tmp);
+                    if (graphDetectCycles(store.waitfor, 1))
+                    {
+                        cycle = 1;
+                        queueEnqueue(notifyFailedLockers, tmp); // TODO
+                    }
+                    fptr->lockedBy = (tmp)->fd;
+                    ec_neg1(queueEnqueue(notifyLockers, tmp), goto rmvclnt_cleanup);
+                }
+                else
+                    fptr->lockedBy = 0;
+            } while (cycle);
         }
         else
             queueRemove(fptr->lockersPending, client, NULL);
